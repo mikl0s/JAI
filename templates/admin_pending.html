@@ -15,10 +15,7 @@
                 <div class="card">
                     <div class="header">
                         <h3>Submission #{{ sub[6].split(',')[0] }}</h3>
-                        <div class="submission-info">
-                            <span class="submission-count">{{ sub[5] }} submissions</span>
-                            <span class="submission-date">First: {{ sub[8] }}</span>
-                        </div>
+                        <div class="info-icon" title="{{ sub[5] }} submissions&#13;First: {{ sub[8] }}">i</div>
                     </div>
                     <div class="content">
                         <div class="field">
@@ -43,15 +40,16 @@
                         </div>
                         
                         <div class="field">
-                            <label>IP Addresses:</label>
+                            
                             {% set ips = sub[7].split(',') %}
                             {% set locations = sub[9].split(',') %}
                             {% for ip in ips %}
                                 <div class="ip-info">
-                                    <span>{{ ip }}</span>
+                                    <label>IP Addresses:</label>
+                                    <span class="ip-address">{{ ip }}</span>
                                     {% set location = locations[loop.index0].split('|') %}
                                     <span class="country-info">
-                                        <img src="https://flagcdn.com/16x12/{{ location[1]|lower }}.png"
+                                        <img src="{{ location[2] }}"
                                              alt="{{ location[0] }}"
                                              title="{{ location[0] }}">
                                         {{ location[0] }}

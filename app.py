@@ -100,6 +100,9 @@ def submit_judge():
 
     data = request.json
     try:
+        # Cache IP geolocation data immediately
+        get_ip_geolocation(ip_address)
+        
         query_db('''
             INSERT INTO submissions (name, position, ruling, link, x_link, ip_address)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -153,11 +156,11 @@ def admin_pending():
             MIN(submitted_at) as first_submitted,
             GROUP_CONCAT(
                 COALESCE(
-                    (SELECT country_name || '|' || country_code2
+                    (SELECT country_name || '|' || country_code2 || '|' || country_flag
                      FROM ip_geolocation
                      WHERE ip_geolocation.ip_address = submissions.ip_address
                      LIMIT 1),
-                    'Unknown|XX'
+                    'Unknown|XX|https://flagcdn.com/16x12/xx.png'
                 )
             ) as locations
         FROM submissions

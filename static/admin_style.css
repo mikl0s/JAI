@@ -74,6 +74,93 @@ body {
     padding: 2rem;
 }
 
+/* Admin actions table styling */
+.admin-actions-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    font-weight: 400;
+}
+
+.admin-actions-table th {
+    background-color: #f8f9fa;
+    padding: 0.75rem;
+    text-align: left;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+}
+
+.admin-actions-table td {
+    padding: 0.75rem;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 300;
+}
+
+.admin-actions-table th:nth-child(1) { width: 15%; } /* Admin */
+.admin-actions-table th:nth-child(2) { width: 10%; } /* Action */
+.admin-actions-table th:nth-child(3) { width: 15%; } /* Details */
+.admin-actions-table th:nth-child(4) { width: 15%; } /* IP Address */
+.admin-actions-table th:nth-child(5) { width: 25%; } /* Location */
+.admin-actions-table th:nth-child(6) { width: 20%; } /* Timestamp */
+
+.admin-actions-table tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Info icon styling */
+.info-icon {
+    width: 24px;
+    height: 24px;
+    background-color: #007bff;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-style: normal;
+    cursor: help;
+    transition: background-color 0.2s ease;
+}
+
+.info-icon:hover {
+    background-color: #0056b3;
+}
+
+/* IP info styling */
+.ip-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+    font-weight: normal;
+    width: 100%;
+}
+
+.ip-address {
+    font-family: monospace;
+    color: #666;
+    margin-right: 0.5rem;
+}
+
+.country-info {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-weight: normal;
+    white-space: nowrap;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    color: #666;
+}
+
+.country-info img {
+    vertical-align: middle;
+    margin: 0 0.25rem;
+    border: 1px solid black;
+    max-height: 16px;
+    width: auto;
+}
+
 /* Top section styling */
 .top-section {
     display: grid;

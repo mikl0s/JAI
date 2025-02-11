@@ -3,6 +3,7 @@ import requests
 from datetime import datetime
 import sqlite3
 from dotenv import load_dotenv
+import subprocess
 
 # Load environment variables from .env.local
 load_dotenv('.env.local')
@@ -20,11 +21,50 @@ def query_db(query, args=(), one=False, commit=True):
     conn.close()
     return (rv[0] if rv else None) if one else rv
 
+def get_external_ip():
+    """
+    Get the external IP address using OpenDNS
+    """
+    try:
+        result = subprocess.run(['dig', '@resolver4.opendns.com', 'myip.opendns.com', '+short'], 
+                              capture_output=True, text=True)
+        if result.returncode == 0:
+            ip = result.stdout.strip()
+            # Skip if IPv6
+            if ':' in ip:
+                return None
+            return ip
+    except Exception as e:
+        print(f"Error fetching external IP: {str(e)}")
+        return None
+
+def is_ipv4(ip):
+    """
+    Check if an IP address is IPv4
+    """
+    return ':' not in ip
+
 def get_ip_geolocation(ip_address):
     """
     Get geolocation data for an IP address, using cached data if available
     or fetching from the API if not.
     """
+    # Skip IPv6 addresses
+    if not is_ipv4(ip_address):
+        return None
+
+    # If IP is localhost/127.0.0.1, get external IP
+    if ip_address in ['127.0.0.1', 'localhost']:
+        external_ip = get_external_ip()
+        if external_ip:
+            ip_address = external_ip
+            # Update any existing records in the database
+            query_db('''
+                UPDATE ip_geolocation 
+                SET ip_address = ? 
+                WHERE ip_address IN ('127.0.0.1', 'localhost')
+            ''', (external_ip,))
+
     # Check cache first
     cached = query_db('''
         SELECT * FROM ip_geolocation 
