@@ -3,8 +3,9 @@ document.addEventListener('DOMContentLoaded', () => {
     fetch('/judges')
         .then(response => response.json())
         .then(data => {
-            displayJudges(data.confirmed, 'confirmed-list');
-            displayJudges(data.undecided, 'undecided-list');
+            // Display all judges in undecided section by default
+            const allJudges = [...data.confirmed, ...data.undecided];
+            displayJudges(allJudges, 'undecided-list');
         })
         .catch(error => console.error('Error fetching data:', error));
 
