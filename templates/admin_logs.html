@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Action Logs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
+</head>
+<body>
+    {% include 'admin_header.html' %}
+    <main class="main-content">
+        <div class="card">
+            <div class="header">
+                <h3>Admin Action Logs</h3>
+            </div>
+            <div class="content">
+                {% if recent_actions %}
+                    <table class="admin-actions-table">
+                        <thead>
+                            <tr>
+                                <th>Admin</th>
+                                <th>Action</th>
+                                <th>Details</th>
+                                <th>IP Address</th>
+                                <th>Location</th>
+                                <th>Timestamp</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for action in recent_actions %}
+                            <tr>
+                                <td>{{ action[0] }}</td>
+                                <td>{{ action[1] }}</td>
+                                <td>{{ action[2] if action[2] else '-' }}</td>
+                                <td>{{ action[3] }}</td>
+                                <td>{{ action[5] }}</td>
+                                <td>{{ action[4] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                {% else %}
+                    <p>No recent actions.</p>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+</body>
+</html>

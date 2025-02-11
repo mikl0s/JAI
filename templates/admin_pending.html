@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Submissions</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
+</head>
+<body>
+    {% include 'admin_header.html' %}
+    <main class="main-content">
+        <div class="submissions-container judges-container">
+            {% if submissions %}
+                {% for sub in submissions %}
+                <div class="card">
+                    <div class="header">
+                        <h3>Submission #{{ sub[6].split(',')[0] }}</h3>
+                        <div class="submission-info">
+                            <span class="submission-count">{{ sub[5] }} submissions</span>
+                            <span class="submission-date">First: {{ sub[8] }}</span>
+                        </div>
+                    </div>
+                    <div class="content">
+                        <div class="field">
+                            <label>Name:</label>
+                            <input type="text" value="{{ sub[0] }}" readonly>
+                        </div>
+                        <div class="field">
+                            <label>Position:</label>
+                            <input type="text" value="{{ sub[1] }}" readonly>
+                        </div>
+                        <div class="field">
+                            <label>Ruling:</label>
+                            <input type="text" value="{{ sub[2] }}" readonly>
+                        </div>
+                        <div class="field">
+                            <label>Ruling Link:</label>
+                            <input type="text" value="{{ sub[3] }}" readonly>
+                        </div>
+                        <div class="field">
+                            <label>X Link:</label>
+                            <input type="text" value="{{ sub[4] }}" readonly>
+                        </div>
+                        
+                        <div class="field">
+                            <label>IP Addresses:</label>
+                            {% set ips = sub[7].split(',') %}
+                            {% set locations = sub[9].split(',') %}
+                            {% for ip in ips %}
+                                <div class="ip-info">
+                                    <span>{{ ip }}</span>
+                                    {% set location = locations[loop.index0].split('|') %}
+                                    <span class="country-info">
+                                        <img src="https://flagcdn.com/16x12/{{ location[1]|lower }}.png"
+                                             alt="{{ location[0] }}"
+                                             title="{{ location[0] }}">
+                                        {{ location[0] }}
+                                    </span>
+                                </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <div class="button-row">
+                            {% set sid = sub[6].split(',')[0] %}
+                            <form action="{{ url_for('handle_submission', submission_id=sid, action='approve') }}" method="post" class="inline-form">
+                                <button type="submit" class="btn btn-small">Approve</button>
+                            </form>
+                            <form action="{{ url_for('handle_submission', submission_id=sid, action='delete') }}" method="post" class="inline-form">
+                                <button type="submit" class="btn btn-danger btn-small">Delete</button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="card">
+                    <div class="content">
+                        <p>No pending submissions.</p>
+                    </div>
+                </div>
+            {% endif %}
+        </div>
+    </main>
+</body>
+</html>

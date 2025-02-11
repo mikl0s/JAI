@@ -1,0 +1,10 @@
+<nav class="admin-nav">
+    <div class="nav-links">
+        <a href="{{ url_for('admin') }}" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>
+        <a href="{{ url_for('admin_pending') }}" class="nav-link {% if active_page == 'pending' %}active{% endif %}">Submissions</a>
+        <a href="{{ url_for('admin_logs') }}" class="nav-link {% if active_page == 'logs' %}active{% endif %}">Logs</a>
+    </div>
+    <form action="{{ url_for('logout') }}" method="post" class="logout-form">
+        <button type="submit" class="logout-button">Logout</button>
+    </form>
+</nav>
