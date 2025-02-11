@@ -9,7 +9,7 @@ Current Version: 1.0
 
 ### Updates
 - [ ] Update 1.0: Initial voting system implementation
-    - [ ] Database schema changes
+    - [x] Database schema changes
     - [ ] Basic frontend voting UI
     - [ ] Basic backend voting endpoints
     - [ ] Rate limiting implementation
@@ -54,34 +54,6 @@ CREATE TABLE votes (
 CREATE INDEX idx_votes_ip_judge ON votes(ip_address, judge_id);
 CREATE INDEX idx_votes_created_at ON votes(created_at);
 CREATE INDEX idx_votes_fingerprint ON votes(browser_fingerprint);
-```
-
-2. Modify `judges` table:
-```sql
--- Add new columns for vote tracking
-ALTER TABLE judges ADD COLUMN corrupt_votes INTEGER DEFAULT 0;
-ALTER TABLE judges ADD COLUMN not_corrupt_votes INTEGER DEFAULT 0;
-ALTER TABLE judges ADD COLUMN status TEXT DEFAULT 'undecided' 
-    CHECK (status IN ('corrupt', 'not_corrupt', 'undecided'));
-ALTER TABLE judges ADD COLUMN under_review BOOLEAN DEFAULT 0;
-```
-
-3. Create new `appeals` table:
-```sql
-CREATE TABLE appeals (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    judge_id INTEGER NOT NULL,
-    ip_address TEXT NOT NULL,
-    browser_fingerprint TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    evidence_link TEXT NOT NULL,
-    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (judge_id) REFERENCES judges(id)
-);
-
-CREATE INDEX idx_appeals_ip ON appeals(ip_address);
-CREATE INDEX idx_appeals_fingerprint ON appeals(browser_fingerprint);
 ```
 
 ## Frontend Changes
@@ -181,22 +153,18 @@ CREATE INDEX idx_appeals_fingerprint ON appeals(browser_fingerprint);
 ## Implementation Order
 
 1. Database Setup:
-   - Create votes table
-   - Create appeals table
-   - Modify judges table
-   - Add necessary indexes
+   - Create votes table ✓
+   - Add necessary indexes ✓
 
 2. Backend Implementation:
    - Basic vote submission endpoint
    - Rate limiting logic
    - Vote counting and status updates
-   - Appeal system implementation
    - Geographic monitoring system
 
 3. Frontend Updates:
    - New section UI
    - Voting buttons and counters
-   - Appeal button and modal
    - Basic feedback system
 
 4. Anti-Spam Measures:
@@ -225,6 +193,4 @@ CREATE INDEX idx_appeals_fingerprint ON appeals(browser_fingerprint);
 
 3. Manual review system: Implemented in admin interface, following the style of the submissions page.
 
-4. Appeal system: Implemented with a floating green button in the bottom left corner, matching the style of the submit new judge button.
-
-5. Rate limiting: Submit new judge and appeal judge buttons use the same rate limiting (once per minute per IP + fingerprint).
+4. Rate limiting: Submit new judge and appeal judge buttons use the same rate limiting (once per minute per IP + fingerprint).

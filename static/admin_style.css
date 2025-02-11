@@ -219,40 +219,11 @@ body {
     border-radius: 4px;
     font-size: 0.95rem;
     box-sizing: border-box;
-    margin-bottom: 0.5rem;
-}
-
-.search-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    padding: 0.5rem 0;
-}
-
-.search-tag {
-    background: #e9ecef;
-    padding: 0.4rem 0.8rem;
-    border-radius: 20px;
-    font-size: 0.9rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-}
-
-.remove-tag {
-    cursor: pointer;
-    font-weight: bold;
-    font-size: 1.2rem;
-    color: #666;
-}
-
-.remove-tag:hover {
-    color: #dc3545;
 }
 
 .judges-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
     gap: 1.5rem;
 }
 
@@ -464,7 +435,7 @@ h1, h2, h3 {
 }
 
 .hidden {
-    display: none !important;
+    display: none;
 }
 
 @media (max-width: 768px) {

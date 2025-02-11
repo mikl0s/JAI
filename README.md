@@ -1,11 +1,11 @@
-# JAI (Judges AI Interface)
+# JAI (Judicial Accountability Initiative)
 
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/mikl0s/JAI/graphs/commit-activity)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A sophisticated web application for managing and processing judicial submissions with advanced IP geolocation tracking and administrative controls.
+A web application for tracking and managing judicial accountability through community submissions, featuring advanced IP geolocation tracking and administrative controls.
 
 ## 🚀 Features
 

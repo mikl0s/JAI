@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, request, redirect, url_for, session
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session, send_from_directory
 import sqlite3
 import os
 from datetime import datetime, timedelta
@@ -7,7 +7,16 @@ from ip_geolocation import get_ip_geolocation, format_geolocation_data
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.secret_key = 'your_secret_key'  # Change this to a random secret key
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'your_secret_key')
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+app.config['SESSION_COOKIE_SECURE'] = True
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+@app.route('/favicon.ico')
+def favicon():
+    return send_from_directory(os.path.join(app.root_path, 'static'),
+                             'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
 def query_db(query, args=(), one=False, commit=True):
     conn = sqlite3.connect('judges.db')
@@ -68,9 +77,9 @@ def index():
 
 @app.route('/judges')
 def get_judges():
-    confirmed = query_db('SELECT * FROM judges WHERE confirmed = 1')
-    undecided = query_db('SELECT * FROM judges WHERE confirmed = 0')
-    return jsonify({'confirmed': confirmed, 'undecided': undecided})
+    # Only return enabled judges
+    judges = query_db('SELECT * FROM judges WHERE displayed = 1')
+    return jsonify({'confirmed': judges, 'undecided': []})
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -206,8 +215,8 @@ def handle_submission(submission_id, action):
         if submission:
             # Add to judges table
             query_db('''
-                INSERT INTO judges (name, job_position, ruling, link, x_link, confirmed)
-                VALUES (?, ?, ?, ?, ?, 0)
+                INSERT INTO judges (name, job_position, ruling, link, x_link)
+                VALUES (?, ?, ?, ?, ?)
             ''', (submission[1], submission[2], submission[3], submission[4], submission[5]))
             
             # Update submission status
@@ -234,9 +243,9 @@ def add_judge():
     x_link = request.form['relevant_link']
     
     query_db('''
-        INSERT INTO judges (name, job_position, ruling, link, x_link, confirmed)
-        VALUES (?, ?, ?, ?, ?, ?)
-    ''', (name, job_position, ruling, link, x_link, 0))
+        INSERT INTO judges (name, job_position, ruling, link, x_link)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (name, job_position, ruling, link, x_link))
     
     log_admin_action('add_judge', f'Added judge {name}')
     return redirect(url_for('admin'))
@@ -249,13 +258,12 @@ def update_judge(judge_id):
     ruling = request.form['ruling']
     link = request.form['ruling_link']
     x_link = request.form['relevant_link']
-    confirmed = request.form['confirmed']
     
     query_db('''
-        UPDATE judges 
-        SET name = ?, job_position = ?, ruling = ?, link = ?, x_link = ?, confirmed = ? 
+        UPDATE judges
+        SET name = ?, job_position = ?, ruling = ?, link = ?, x_link = ?
         WHERE id = ?
-    ''', (name, job_position, ruling, link, x_link, confirmed, judge_id))
+    ''', (name, job_position, ruling, link, x_link, judge_id))
     
     log_admin_action('update_judge', f'Updated judge {judge_id}')
     return redirect(url_for('admin'))
@@ -263,8 +271,13 @@ def update_judge(judge_id):
 @app.route('/admin/disable/<int:judge_id>', methods=['POST'])
 @admin_required
 def disable_judge(judge_id):
-    query_db('UPDATE judges SET displayed = 0 WHERE id = ?', (judge_id,))
-    log_admin_action('disable_judge', f'Disabled judge {judge_id}')
+    # Get current displayed state
+    current_state = query_db('SELECT displayed FROM judges WHERE id = ?', (judge_id,), one=True)[0]
+    # Set to 0 to disable, 1 to enable
+    new_state = 0 if current_state == 1 else 1
+    query_db('UPDATE judges SET displayed = ? WHERE id = ?', (new_state, judge_id))
+    action = 'enable' if new_state == 1 else 'disable'
+    log_admin_action(f'{action}_judge', f'{action.capitalize()}d judge {judge_id}')
     return redirect(url_for('admin'))
 
 @app.route('/logout', methods=['POST'])

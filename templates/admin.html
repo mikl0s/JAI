@@ -4,12 +4,16 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Judges</title>
+    <link rel="icon" type="image/x-icon" href="{{ url_for('static', filename='favicon.ico') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
 </head>
 <body>
-    {% include 'admin_header.html' %}
+    <header class="header">
+        {% include 'admin_header.html' %}
+    </header>
 
     <main class="main-content">
+        <!-- Add Judge Card moved above search -->
         <div class="top-section">
             <div class="add-judge-container">
                 <div class="card">
@@ -51,24 +55,20 @@
                                 <div class="stat-value">{{ judges|length }}</div>
                             </div>
                             <div class="stat-item">
-                                <div class="stat-label">Confirmed</div>
-                                <div class="stat-value">{{ judges|selectattr('7', 'eq', 1)|list|length }}</div>
+                                <div class="stat-label">Active</div>
+                                <div class="stat-value">{{ judges|selectattr('6', 'eq', 1)|list|length }}</div>
                             </div>
                             <div class="stat-item">
                                 <div class="stat-label">Disabled</div>
-                                <div class="stat-value">{{ judges|selectattr('8', 'eq', 0)|list|length }}</div>
+                                <div class="stat-value">{{ judges|selectattr('6', 'eq', 0)|list|length }}</div>
                             </div>
                             <div class="stat-item">
                                 <div class="stat-label">Pending Submissions</div>
-                                <div class="stat-value">{{ stats.pending }}</div>
-                            </div>
-                            <div class="stat-item">
-                                <div class="stat-label">Approved Submissions</div>
-                                <div class="stat-value">{{ stats.approved }}</div>
+                                <div class="stat-value">{{ pending_count }}</div>
                             </div>
                             <div class="stat-item">
                                 <div class="stat-label">Rejected Submissions</div>
-                                <div class="stat-value">{{ stats.rejected }}</div>
+                                <div class="stat-value">{{ rejected_count }}</div>
                             </div>
                         </div>
                     </div>
@@ -78,8 +78,7 @@
 
         <div class="search-section">
             <div class="search-container">
-                <input type="text" id="judgeSearch" class="search-input" placeholder="Type and press Enter to add search tags...">
-                <div id="searchTags" class="search-tags"></div>
+                <input type="text" id="judgeSearch" class="search-input" placeholder="Search judges...">
             </div>
         </div>
 
@@ -91,50 +90,42 @@
                 {% for submission in submissions %}
                 <div class="card submission-card">
                     <div class="header">
-                        <h3>{{ submission[0] }}</h3>
-                        <span class="submission-count">{{ submission[5] }} submissions</span>
-                        <span class="submission-date">First submitted: {{ submission[8] }}</span>
+                        <h3>Submission #{{ submission[0] }}</h3>
+                        <span class="submission-date">{{ submission[7] }}</span>
                     </div>
                     <div class="content">
                         <div class="field">
                             <label>Name:</label>
-                            <span>{{ submission[0] }}</span>
-                        </div>
-                        <div class="field">
-                            <label>Position:</label>
                             <span>{{ submission[1] }}</span>
                         </div>
                         <div class="field">
-                            <label>Ruling:</label>
+                            <label>Position:</label>
                             <span>{{ submission[2] }}</span>
                         </div>
                         <div class="field">
-                            <label>Ruling Link:</label>
-                            <a href="{{ submission[3] }}" target="_blank">{{ submission[3] }}</a>
+                            <label>Ruling:</label>
+                            <span>{{ submission[3] }}</span>
                         </div>
-                        {% if submission[4] %}
                         <div class="field">
-                            <label>X Link:</label>
+                            <label>Ruling Link:</label>
                             <a href="{{ submission[4] }}" target="_blank">{{ submission[4] }}</a>
                         </div>
-                        {% endif %}
+                        {% if submission[5] %}
                         <div class="field">
-                            <label>IP Addresses:</label>
-                            <span class="ip-addresses">{{ submission[7] }}</span>
+                            <label>X Link:</label>
+                            <a href="{{ submission[5] }}" target="_blank">{{ submission[5] }}</a>
                         </div>
+                        {% endif %}
                         <div class="submission-actions">
-                            {% set submission_ids = submission[6].split(',') %}
-                            {% for sid in submission_ids %}
-                            <form method="post" action="{{ url_for('handle_submission', submission_id=sid, action='approve') }}" class="inline-form">
-                                <button type="submit" class="btn btn-success">Approve #{{ sid }}</button>
+                            <form method="post" action="{{ url_for('handle_submission', submission_id=submission[0], action='approve') }}" class="inline-form">
+                                <button type="submit" class="btn btn-success">Approve</button>
                             </form>
-                            <form method="post" action="{{ url_for('handle_submission', submission_id=sid, action='reject') }}" class="inline-form">
-                                <button type="submit" class="btn btn-warning">Reject #{{ sid }}</button>
+                            <form method="post" action="{{ url_for('handle_submission', submission_id=submission[0], action='reject') }}" class="inline-form">
+                                <button type="submit" class="btn btn-warning">Reject</button>
                             </form>
-                            <form method="post" action="{{ url_for('handle_submission', submission_id=sid, action='delete') }}" class="inline-form">
-                                <button type="submit" class="btn btn-danger">Delete #{{ sid }}</button>
+                            <form method="post" action="{{ url_for('handle_submission', submission_id=submission[0], action='delete') }}" class="inline-form">
+                                <button type="submit" class="btn btn-danger">Delete</button>
                             </form>
-                            {% endfor %}
                         </div>
                     </div>
                 </div>
@@ -146,24 +137,18 @@
         <div class="judges-container">
             <!-- Existing Judges -->
             {% for judge in judges %}
-            <div class="card judge-card {% if judge[7] == 1 %}confirmed{% endif %} {% if judge[8] == 0 %}disabled{% endif %}"
+            <div class="card judge-card {% if judge[6] == 0 %}disabled{% endif %}"
                  data-name="{{ judge[1] }}"
                  data-position="{{ judge[2] }}"
                  data-ruling="{{ judge[3] }}"
-                 data-status="{% if judge[7] == 1 %}confirmed{% endif %}{% if judge[8] == 0 %}disabled{% endif %}">
+                 data-status="{% if judge[6] == 0 %}disabled{% endif %}">
                 <div class="card-status">
-                    {% if judge[8] == 0 %}
+                    {% if judge[6] == 0 %}
                     <div class="disabled-mark">✕</div>
-                    {% endif %}
-                    {% if judge[7] == 1 %}
-                    <div class="confirmed-mark">✓</div>
                     {% endif %}
                 </div>
                 <div class="header">
                     <h3>Judge #{{ judge[0] }}</h3>
-                    <div class="confirmed-checkbox">
-                        <input type="checkbox" form="update-form-{{ judge[0] }}" name="confirmed" value="1" {% if judge[7] == 1 %}checked{% endif %}>
-                    </div>
                 </div>
                 <div class="content">
                     <form id="update-form-{{ judge[0] }}" method="post" action="{{ url_for('update_judge', judge_id=judge[0]) }}">
@@ -184,10 +169,10 @@
                         </div>
                         <div class="button-row">
                             <button type="submit" class="btn btn-small">Update</button>
-                            <form method="post" action="{{ url_for('disable_judge', judge_id=judge[0]) }}" class="inline-form">
-                                <button type="submit" class="btn btn-danger btn-small">Disable</button>
-                            </form>
+                            <button type="submit" class="btn btn-danger btn-small" form="disable-form-{{ judge[0] }}">{% if judge[6] == 0 %}Enable{% else %}Disable{% endif %}</button>
                         </div>
+                    </form>
+                    <form id="disable-form-{{ judge[0] }}" method="post" action="{{ url_for('disable_judge', judge_id=judge[0]) }}" class="inline-form">
                     </form>
                 </div>
             </div>
@@ -198,17 +183,12 @@
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             const searchInput = document.getElementById('judgeSearch');
-            const searchTags = document.getElementById('searchTags');
             const judgeCards = document.querySelectorAll('.judge-card');
-            let activeTags = new Set();
 
-            function updateSearch() {
+            function updateSearch(searchValue) {
+                const searchTerm = searchValue.toLowerCase();
+                
                 judgeCards.forEach(card => {
-                    if (activeTags.size === 0) {
-                        card.classList.remove('hidden');
-                        return;
-                    }
-
                     const cardContent = {
                         name: card.dataset.name.toLowerCase(),
                         position: card.dataset.position.toLowerCase(),
@@ -216,13 +196,11 @@
                         status: card.dataset.status.toLowerCase()
                     };
 
-                    const matchesAllTags = Array.from(activeTags).every(tag => {
-                        return Object.values(cardContent).some(value => 
-                            value && value.includes(tag.toLowerCase())
-                        );
-                    });
+                    const matches = Object.values(cardContent).some(value => 
+                        value && value.includes(searchTerm)
+                    );
 
-                    if (matchesAllTags) {
+                    if (matches || searchTerm.length < 3) {
                         card.classList.remove('hidden');
                     } else {
                         card.classList.add('hidden');
@@ -230,38 +208,13 @@
                 });
             }
 
-            function addSearchTag(value) {
-                if (!value) return;
-                
-                const tag = document.createElement('span');
-                tag.className = 'search-tag';
-                tag.textContent = value;
-                
-                const removeBtn = document.createElement('span');
-                removeBtn.className = 'remove-tag';
-                removeBtn.textContent = '×';
-                removeBtn.onclick = () => {
-                    activeTags.delete(value.toLowerCase());
-                    tag.remove();
-                    updateSearch();
-                };
-                
-                tag.appendChild(removeBtn);
-                searchTags.appendChild(tag);
-                activeTags.add(value.toLowerCase());
-                updateSearch();
-            }
-
-            searchInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    const value = this.value.trim();
-                    if (value) {
-                        addSearchTag(value);
-                        this.value = '';
-                    }
+            searchInput.addEventListener('input', function(e) {
+                const value = this.value.trim();
+                if (value.length >= 3 || value.length === 0) {
+                    updateSearch(value);
                 }
             });
         });
     </script>
 </body>
+</html>
