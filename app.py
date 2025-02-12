@@ -51,7 +51,8 @@ def add_ip_to_whitelist(ip_address, reason, hours=24):
     ''', (ip_address, reason, expiry))
 
 def check_rate_limit(ip_address):
-    if is_ip_whitelisted(ip_address):
+    # Always allow localhost for testing
+    if ip_address == '127.0.0.1' or is_ip_whitelisted(ip_address):
         return True
     
     # Check submissions in last 10 minutes
@@ -77,9 +78,77 @@ def index():
 
 @app.route('/judges')
 def get_judges():
-    # Only return enabled judges
-    judges = query_db('SELECT * FROM judges WHERE displayed = 1')
-    return jsonify({'confirmed': judges, 'undecided': []})
+    # Get judges with vote counts
+    judges = query_db('''
+        SELECT j.*,
+            COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
+            COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
+        FROM judges j
+        LEFT JOIN votes v ON j.id = v.judge_id
+        WHERE j.displayed = 1
+        GROUP BY j.id
+    ''')
+    
+    # Determine status based on vote ratios
+    judges_with_status = []
+    for judge in judges:
+        total_votes = judge[-2] + judge[-1]
+        status = 'undecided'
+        if total_votes >= 5:
+            ratio = judge[-2] / total_votes
+            if ratio >= 0.6:
+                status = 'corrupt'
+            elif ratio <= 0.4:
+                status = 'not_corrupt'
+        
+        judges_with_status.append({
+            **dict(zip(['id', 'name', 'job_position', 'ruling', 'link', 'x_link', 'displayed'], judge[:-2])),
+            'corrupt_votes': judge[-2],
+            'not_corrupt_votes': judge[-1],
+            'status': status
+        })
+    
+    return jsonify({'judges': judges_with_status})
+
+@app.route('/vote/<int:judge_id>', methods=['POST'])
+def submit_vote(judge_id):
+    ip_address = request.remote_addr
+    data = request.json
+    
+    # Check if judge exists
+    judge = query_db('SELECT * FROM judges WHERE id = ? AND displayed = 1', (judge_id,), one=True)
+    if not judge:
+        return jsonify({'success': False, 'error': 'Judge not found'}), 404
+    
+    # Check rate limit (1 vote per judge per day)
+    last_vote = query_db('''
+        SELECT created_at FROM votes
+        WHERE ip_address = ? AND judge_id = ?
+        ORDER BY created_at DESC
+        LIMIT 1
+    ''', (ip_address, judge_id), one=True)
+    
+    if last_vote and (datetime.now() - datetime.fromisoformat(last_vote[0])) < timedelta(days=1):
+        return jsonify({
+            'success': False,
+            'error': 'You can only vote once per judge every 24 hours'
+        }), 429
+    
+    # Validate vote type
+    vote_type = data.get('vote_type')
+    if vote_type not in ['corrupt', 'not_corrupt']:
+        return jsonify({'success': False, 'error': 'Invalid vote type'}), 400
+    
+    # Insert vote
+    try:
+        query_db('''
+            INSERT INTO votes (judge_id, ip_address, vote_type, browser_fingerprint)
+            VALUES (?, ?, ?, ?)
+        ''', (judge_id, ip_address, vote_type, data.get('fingerprint', '')))
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -286,6 +355,12 @@ def logout():
         log_admin_action('logout')
     session.clear()
     return redirect(url_for('admin'))
+
+# Ensure localhost is whitelisted
+try:
+    add_ip_to_whitelist('127.0.0.1', 'localhost testing', hours=8760) # 1 year
+except sqlite3.IntegrityError:
+    pass  # Already exists
 
 if __name__ == '__main__':
     app.run(debug=True)

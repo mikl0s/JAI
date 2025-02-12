@@ -24,6 +24,15 @@ If spam becomes a significant issue despite our current anti-spam measures, impl
 - Maintain privacy by minimizing collected data
 - Allow account deletion with full data removal
 
+### Technical Implementation Details
+Flask-Login provides user session management for Flask, handling common tasks like logging in, logging out, and managing user sessions. It's free and integrates directly with Flask.
+
+Flask-Bcrypt offers secure password hashing, which is crucial for user security.
+
+Flask-SQLAlchemy can be used for managing user data in a database, providing a way to store user information securely and efficiently.
+
+Implementation: You can combine these to create a basic but secure user authentication system. Flask-Login manages the session, Flask-Bcrypt secures passwords, and SQLAlchemy handles the database operations.
+
 ## Public API for Vote Data Transparency
 
 A public API would enhance transparency and allow for independent analysis of voting patterns while maintaining system integrity.

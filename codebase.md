@@ -39,7 +39,6 @@ CREATE TABLE judges (
     ruling TEXT NOT NULL,
     link TEXT NOT NULL,
     x_link TEXT,
-    confirmed INTEGER DEFAULT 0,
     displayed INTEGER DEFAULT 1
 );
 ```
@@ -132,6 +131,11 @@ CREATE TABLE votes (
 CREATE INDEX idx_votes_ip_judge ON votes(ip_address, judge_id);
 CREATE INDEX idx_votes_created_at ON votes(created_at);
 CREATE INDEX idx_votes_fingerprint ON votes(browser_fingerprint);
+```
+
+7. `sqlite_sequence`
+```sql
+CREATE TABLE sqlite_sequence(name,seq);
 ```
 
 ## Key Components

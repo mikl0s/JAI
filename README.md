@@ -5,32 +5,44 @@
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/mikl0s/JAI/graphs/commit-activity)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A web application for tracking and managing judicial accountability through community submissions, featuring advanced IP geolocation tracking and administrative controls.
+A comprehensive web application for tracking judicial accountability through community submissions and voting, featuring advanced IP geolocation tracking, rate limiting, and administrative controls.
 
 ## 🚀 Features
 
-- **Secure Authentication System**: Admin login portal with session management
-- **Submission Management**: Process and track judicial submissions
-- **IP Geolocation**: Track and verify submission origins
-- **Administrative Dashboard**: 
+- **Secure Authentication System**: Admin login portal with session management and IP whitelisting
+- **Submission Management**: Process and track judicial submissions with status tracking
+- **Voting System**: Community voting on judicial accountability with rate limiting
+- **IP Geolocation**: Track and verify submission origins with detailed geolocation data
+- **Rate Limiting**: IP-based submission and voting rate controls
+- **Administrative Dashboard**:
   - Pending submissions review
-  - Submission logs
+  - Voting statistics and patterns
+  - Submission logs with geolocation data
   - Real-time status updates
+  - Judge management interface
 - **Custom Styling**: Modern UI with custom fonts and responsive design
+- **Security Features**:
+  - Browser fingerprint validation
+  - Input validation and sanitization
+  - Action logging and monitoring
 
 ## 🛠️ Tech Stack
 
 - **Backend**: Python/Flask
-- **Database**: SQLite
-- **Frontend**: HTML, CSS, JavaScript
-- **Authentication**: Flask-Login
+- **Database**: SQLite with advanced indexing
+- **Frontend**: HTML5, CSS3, JavaScript (ES6+)
+- **Authentication**: Flask-Login with session management
 - **Styling**: Custom CSS with Gotham and Old Stamper fonts
+- **Security**: Flask-Talisman, CSRF protection
+- **Geolocation**: IP-based geolocation with caching
+- **Rate Limiting**: Custom implementation with IP tracking
 
 ## 📋 Prerequisites
 
 - Python 3.8 or higher
 - pip (Python package manager)
 - Git
+- SQLite3
 
 ## 🔧 Installation
 
@@ -54,11 +66,16 @@ pip install -r requirements.txt
 4. Initialize the database:
 ```bash
 python initialize_db.py
+python create_tables.py
+python populate_ip_geolocation.py
 ```
 
-5. Create required tables:
-```bash
-python create_tables.py
+5. Set up environment variables:
+Create a `.env.local` file with the following variables:
+```
+FLASK_SECRET_KEY=your_secret_key
+ADMIN_USERNAME=your_admin_username
+ADMIN_PASSWORD=your_admin_password
 ```
 
 ## 🚦 Usage
@@ -72,24 +89,48 @@ python app.py
 - Main interface: `http://localhost:5000`
 - Admin panel: `http://localhost:5000/admin`
 
-## 🔐 Environment Variables
+3. Development workflow:
+- Database migrations: Update create_tables.py and run initialize_db.py
+- Testing: Manual testing through interface and database verification
+- Deployment: Ensure proper security configurations and environment variables
 
-Create a `.env.local` file with the following variables:
-```
-FLASK_SECRET_KEY=your_secret_key
-ADMIN_USERNAME=your_admin_username
-ADMIN_PASSWORD=your_admin_password
-```
+## 🔐 Security Features
+
+- **Rate Limiting**:
+  - Submission cooldown periods
+  - Vote rate limiting (1 vote per judge per day)
+  - IP-based tracking
+  - Whitelist system
+  - Browser fingerprint validation
+
+- **Admin Security**:
+  - Session-based authentication
+  - IP whitelisting
+  - Action logging
+  - Geographic tracking
+  - Vote pattern monitoring
+
+- **Input Validation**:
+  - Form validation
+  - URL validation
+  - Status validation
+  - Vote validation
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+We welcome contributions! Please follow these guidelines:
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
 3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
 4. Push to the branch (`git push origin feature/AmazingFeature`)
 5. Open a Pull Request
+
+Before contributing, please:
+- Review the codebase documentation in codebase.md
+- Ensure your changes follow the existing security patterns
+- Include appropriate tests and documentation updates
+- Verify database schema compatibility
 
 ## 📝 License
 
@@ -99,7 +140,9 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - Thanks to all contributors who have helped shape JAI
 - Special thanks to the Flask community for excellent documentation
+- Inspiration from judicial accountability initiatives worldwide
 
 ## 📞 Contact
 
 Project Link: [https://github.com/mikl0s/JAI](https://github.com/mikl0s/JAI)
+Issue Tracker: [https://github.com/mikl0s/JAI/issues](https://github.com/mikl0s/JAI/issues)
