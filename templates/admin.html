@@ -42,7 +42,12 @@
                     </div>
                 </div>
             </div>
-            
+            <div class="recalculate-button-container">
+                <form method="post" action="{{ url_for('recalculate_status') }}">
+                    <button type="submit" class="btn btn-warning">Recalculate Statuses</button>
+                </form>
+            </div>
+
             <div class="stats-card">
                 <div class="card">
                     <div class="header">

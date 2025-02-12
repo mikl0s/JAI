@@ -12,7 +12,7 @@ Current Version: 1.0
     - [x] Database schema changes
     - [x] Basic backend voting endpoints
     - [x] Basic frontend voting UI
-    - [ ] Rate limiting implementation
+    - [x] Rate limiting implementation
 
 - [ ] Update 1.1: Anti-spam measures
     - [ ] Browser fingerprinting

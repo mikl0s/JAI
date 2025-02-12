@@ -54,7 +54,7 @@ main {
 }
 
 .judge-card {
-    background-color: #f0f0f0;
+    background-color: #f0f0f0; /* Light grey background */
     color: #000000;
     border-radius: 8px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
@@ -85,6 +85,12 @@ main {
     gap: 10px;
     margin-left: 20px;
     font-size: 0.9em;
+    font-size: 0.9em;
+}
+
+.vote-ratio {
+    color: white;
+    font-weight: bold;
 }
 
 .corrupt-count {
@@ -97,43 +103,59 @@ main {
     font-weight: bold;
 }
 
-.vote-buttons {
-    display: flex;
-    gap: 10px;
-    margin-top: 15px;
-}
+
 
 .vote-button {
-    flex: 1;
-    padding: 8px 12px;
+    padding: 8px 12px; /* Same padding as .link-button */
     border: none;
-    border-radius: 4px;
+    border-radius: 20px; /* Rounded corners */
     cursor: pointer;
     font-weight: bold;
     transition: all 0.2s;
+    margin: 0 5px;
+    font-size: 1em; /* Same font-size as .link-button */
+    flex: 1;
+    text-align: center;
 }
 
+.vote-header {
+    text-align: center;
+    margin-bottom: 5px;
+    font-weight: bold;
+    color: #333;
+}
+
+
 .vote-button.corrupt {
-    background-color: #bf0a30;
+    background-color: #d9534f; /* Red from screenshot */
     color: white;
 }
 
 .vote-button.corrupt:hover {
-    background-color: #8f0824;
+    background-color: #c9302c; /* Darker red on hover */
 }
 
 .vote-button.not-corrupt {
-    background-color: #008000;
+    background-color: #5cb85c; /* Green from screenshot */
     color: white;
 }
 
 .vote-button.not-corrupt:hover {
-    background-color: #006400;
+    background-color: #449d44; /* Darker green on hover */
 }
 
 .vote-button:disabled {
     background-color: #cccccc;
     cursor: not-allowed;
+}
+
+
+
+.card-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr; /* 50/50 ratio */
+    gap: 10px;
+    align-items: center; /* Vertically center items */
 }
 
 .card-content {
@@ -159,11 +181,7 @@ main {
     height: 2.4em;
 }
 
-.card-links {
-    display: flex;
-    gap: 10px;
-    margin-top: 15px;
-}
+
 
 .link-button {
     display: inline-block;
@@ -171,7 +189,7 @@ main {
     background-color: #002868;
     color: white !important;
     text-decoration: none;
-    border-radius: 4px;
+    border-radius: 20px; /* Rounded corners */
     flex: 1;
     text-align: center;
     transition: background-color 0.2s;

@@ -95,12 +95,13 @@ def get_judges():
         total_votes = judge[-2] + judge[-1]
         status = 'undecided'
         if total_votes >= 5:
-            ratio = judge[-2] / total_votes
-            if ratio >= 0.6:
+            corrupt_ratio = judge[-2] / total_votes if total_votes > 0 else 0
+            not_corrupt_ratio = judge[-1] / total_votes if total_votes > 0 else 0
+            if corrupt_ratio >= 0.8333:  # 5/6 = 0.8333... (5:1 ratio)
                 status = 'corrupt'
-            elif ratio <= 0.4:
+            elif not_corrupt_ratio >= 0.8333: # 5:1 ratio for not_corrupt
                 status = 'not_corrupt'
-        
+
         judges_with_status.append({
             **dict(zip(['id', 'name', 'job_position', 'ruling', 'link', 'x_link', 'displayed'], judge[:-2])),
             'corrupt_votes': judge[-2],
@@ -121,19 +122,20 @@ def submit_vote(judge_id):
         return jsonify({'success': False, 'error': 'Judge not found'}), 404
     
     # Check rate limit (1 vote per judge per day)
-    last_vote = query_db('''
-        SELECT created_at FROM votes
-        WHERE ip_address = ? AND judge_id = ?
-        ORDER BY created_at DESC
-        LIMIT 1
-    ''', (ip_address, judge_id), one=True)
-    
-    if last_vote and (datetime.now() - datetime.fromisoformat(last_vote[0])) < timedelta(days=1):
-        return jsonify({
-            'success': False,
-            'error': 'You can only vote once per judge every 24 hours'
-        }), 429
-    
+    if not is_ip_whitelisted(ip_address):
+        last_vote = query_db('''
+            SELECT created_at FROM votes
+            WHERE ip_address = ? AND judge_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        ''', (ip_address, judge_id), one=True)
+        
+        if last_vote and (datetime.now() - datetime.fromisoformat(last_vote[0])) < timedelta(days=1):
+            return jsonify({
+                'success': False,
+                'error': 'You can only vote once per judge every 24 hours'
+            }), 429
+
     # Validate vote type
     vote_type = data.get('vote_type')
     if vote_type not in ['corrupt', 'not_corrupt']:
@@ -355,6 +357,38 @@ def logout():
         log_admin_action('logout')
     session.clear()
     return redirect(url_for('admin'))
+
+@app.route('/admin/recalculate_status', methods=['POST'])
+@admin_required
+def recalculate_status():
+    # Get all judges with vote counts
+    judges = query_db('''
+        SELECT j.*,
+            COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
+            COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
+        FROM judges j
+        LEFT JOIN votes v ON j.id = v.judge_id
+        GROUP BY j.id
+    ''')
+
+    # Recalculate status and update database
+    for judge in judges:
+        judge_id = judge[0]
+        total_votes = judge[-2] + judge[-1]
+        status = 'undecided'
+        if total_votes >= 5:
+            corrupt_ratio = judge[-2] / total_votes if total_votes > 0 else 0
+            not_corrupt_ratio = judge[-1] / total_votes if total_votes > 0 else 0
+            if corrupt_ratio >= 0.8333:
+                status = 'corrupt'
+            elif not_corrupt_ratio >= 0.8333:
+                status = 'not_corrupt'
+
+        query_db('UPDATE judges SET status = ? WHERE id = ?', (status, judge_id))
+
+    log_admin_action('recalculate_status', 'Recalculated judge statuses based on vote counts')
+    return redirect(url_for('admin'))
+
 
 # Ensure localhost is whitelisted
 try:
