@@ -83,80 +83,101 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function displayJudges(judges) {
     const updatedJudgeIds = new Set();
+    const confirmedTemplate = document.querySelector('#confirmed-template');
+    const undecidedTemplate = document.querySelector('#undecided-template');
+    const notCorruptTemplate = document.querySelector('#not-corrupt-template');
 
-    judges.forEach(judge => {
-      updatedJudgeIds.add(judge.id);
-      let containerId;
-      if (judge.status === 'corrupt') {
-        containerId = 'confirmed-list';
-      } else if (judge.status === 'not_corrupt') {
-        containerId = 'not-corrupt-list';
-      } else {
-        containerId = 'undecided-list';
-      }
-
-      const container = document.getElementById(containerId);
-      let card = judgeIdToCardMap[judge.id];
-
-      if (!card) {
-        card = document.createElement('div');
-        card.className = 'judge-card';
-        judgeIdToCardMap[judge.id] = card;
-        container.appendChild(card);
-      } else if (card.parentNode.id !== containerId) {
-        // Move card to correct container
-        card.parentNode.removeChild(card);
-        container.appendChild(card);
-      }
-
-      const totalVotes = judge.corrupt_votes + judge.not_corrupt_votes;
-      const ratio = totalVotes > 0 ? (judge.corrupt_votes / totalVotes).toFixed(2) : 'N/A';
-
-      // Update card content
-      card.innerHTML = `
-        <div class="card-header">
-          <h3>${judge.name}</h3>
-          <div class="vote-ratio">${ratio}</div>
-        </div>
-        <div class="card-content">
-          <p data-position title="${judge.job_position}"><strong>Position:</strong> ${judge.job_position}</p>
-          <p data-ruling title="${judge.ruling}"><strong>Ruling:</strong> ${judge.ruling}</p>
-          <div class="card-grid">
-            <a href="${judge.link}" target="_blank" class="link-button">View Ruling</a>
-            <button class="vote-button corrupt" data-judge-id="${judge.id}">Corrupt</button>
-            ${judge.x_link ? `<a href="${judge.x_link}" target="_blank" class="link-button">View on X</a>` : ''}
-            <button class="vote-button not-corrupt" data-judge-id="${judge.id}">Not Corrupt</button>
-          </div>
-        </div>
-      `;
-    });
-
-    // Remove old cards
-    for (const judgeId in judgeIdToCardMap) {
-      if (!updatedJudgeIds.has(parseInt(judgeId))) {
-        const cardToRemove = judgeIdToCardMap[judgeId];
-        cardToRemove.parentNode.removeChild(cardToRemove);
-        delete judgeIdToCardMap[judgeId];
-      }
+  judges.forEach(judge => {
+    updatedJudgeIds.add(judge.id);
+    let containerId;
+    let template;
+    if (judge.status === 'corrupt') {
+      containerId = 'confirmed-list';
+      template = confirmedTemplate;
+    } else if (judge.status === 'not_corrupt') {
+      containerId = 'not-corrupt-list';
+      template = notCorruptTemplate;
+    } else {
+      containerId = 'undecided-list';
+      template = undecidedTemplate;
     }
 
-    // Add event listeners to vote buttons (only for new buttons)
-    document.querySelectorAll('.vote-button').forEach(button => {
-      if (!button.hasEventListener) {
-        button.addEventListener('click', handleVote);
-        button.hasEventListener = true; // Mark as having an event listener
+    const container = document.getElementById(containerId);
+    let card = judgeIdToCardMap[judge.id];
+
+  if (!card) {
+    // Clone the template
+      if (template) {
+        const templateContent = template.content.cloneNode(true);
+        card = templateContent.querySelector('.card');
+        judgeIdToCardMap[judge.id] = card;
+        container.appendChild(card);
+      } else {
+        console.error('Template not found for judge:', judge);
+        return;
       }
-    });
+    } else if (card.parentNode.id !== containerId) {
+      // Move card to correct container
+      card.parentNode.removeChild(card);
+      container.appendChild(card);
+    }
+
+
+    // Update card content
+    const totalVotes = judge.corrupt_votes + judge.not_corrupt_votes;
+    const ratio = totalVotes > 0 ? Math.round((judge.corrupt_votes / totalVotes) * 100) : 0;
+
+    if (!card) {
+      console.log("card is undefined", judgeIdToCardMap, judge.id);
+    }
+
+ const ribbon = card.querySelector('.ribbon');
+    if (judge.status === 'not_corrupt') {
+        const notCorruptRatio = totalVotes > 0 ? Math.round((judge.not_corrupt_votes / totalVotes) * 100) : 0;
+     ribbon.textContent = `${notCorruptRatio}% not corrupt votes`;
+     ribbon.style.backgroundColor = '#27ae60'; // Green
+    } else {
+     ribbon.textContent = judge.status === 'undecided' ? 'Undecided' : `${ratio}% corrupt votes`;
+        ribbon.style.backgroundColor = '#c0392b'; // Original red
+    }
+
+    card.querySelector('.judge-name').textContent = judge.name;
+    card.querySelector('.btn-row a:nth-child(2)').href = judge.x_link || '#'; // Use '#' if x_link is null
+    if (!judge.x_link) {
+        card.querySelector('.btn-row a:nth-child(2)').style.display = 'none'; // Hide if no x_link
+    }
+    card.querySelector('.corrupt-vote-btn').textContent = `Corrupt (${judge.corrupt_votes})`;
+    card.querySelector('.not-corrupt-vote-btn').textContent = `Not Corrupt (${judge.not_corrupt_votes})`;
+    card.querySelector('.corrupt-vote-btn').dataset.judgeId = judge.id;
+    card.querySelector('.not-corrupt-vote-btn').dataset.judgeId = judge.id;
+  });
+
+  // Remove old cards
+  for (const judgeId in judgeIdToCardMap) {
+    if (!updatedJudgeIds.has(parseInt(judgeId))) {
+      const cardToRemove = judgeIdToCardMap[judgeId];
+      cardToRemove.parentNode.removeChild(cardToRemove);
+      delete judgeIdToCardMap[judgeId];
+    }
   }
+
+  // Add event listeners to vote buttons (only for new buttons)
+  document.querySelectorAll('.corrupt-vote-btn, .not-corrupt-vote-btn').forEach(button => {
+    if (!button.hasEventListener) {
+      button.addEventListener('click', handleVote);
+      button.hasEventListener = true; // Mark as having an event listener
+    }
+  });
+}
 
 
   function handleVote(event) {
-        const button = event.target;
-        const judgeId = button.dataset.judgeId;
-        const voteType = button.classList.contains('corrupt-vote') ? 'corrupt' : 'not_corrupt';
+      const button = event.target;
+      const judgeId = button.dataset.judgeId;
+      const voteType = button.classList.contains('corrupt-vote-btn') ? 'corrupt' : 'not_corrupt';
 
-        // Generate basic fingerprint (for demo purposes)
-        const fingerprint = Math.random().toString(36).substring(2, 15);
+      // Generate basic fingerprint (for demo purposes)
+      const fingerprint = Math.random().toString(36).substring(2, 15);
 
         fetch(`/vote/${judgeId}`, {
             method: 'POST',
@@ -179,27 +200,26 @@ document.addEventListener('DOMContentLoaded', () => {
                      .then(updatedData => {
                          const updatedJudge = updatedData.judges.find(j => j.id === parseInt(judgeId));
                          if (updatedJudge) {
-                             const corruptCountSpan = card.querySelector('.corrupt-count');
-                             const notCorruptCountSpan = card.querySelector('.not-corrupt-count');
-                             const ratioSpan = card.querySelector('.vote-ratio')
+                 const corruptCountSpan = card.querySelector('.corrupt-vote-btn');
+                 const notCorruptCountSpan = card.querySelector('.not-corrupt-vote-btn');
+                 const ratioSpan = card.querySelector('.ribbon');
 
-                             corruptCountSpan.textContent = updatedJudge.corrupt_votes;
-                             notCorruptCountSpan.textContent = updatedJudge.not_corrupt_votes;
+                 corruptCountSpan.textContent = `Corrupt (${updatedJudge.corrupt_votes})`;
+                 notCorruptCountSpan.textContent = `Not Corrupt (${updatedJudge.not_corrupt_votes})`;
 
-                             const totalVotes = updatedJudge.corrupt_votes + updatedJudge.not_corrupt_votes;
-                             ratioSpan.textContent = totalVotes > 0 ? (updatedJudge.corrupt_votes / totalVotes).toFixed(2) : 'N/A';
-
-
-                         }
-                     })
-                }
-            } else {
-                alert(data.error || 'Error submitting vote');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            alert('Error submitting vote. Please try again.');
-        });
-    }
-});
+                 const totalVotes = updatedJudge.corrupt_votes + updatedJudge.not_corrupt_votes;
+                 const newRatio = totalVotes > 0 ? Math.round((updatedJudge.corrupt_votes / totalVotes) * 100) : 0;
+                 ratioSpan.textContent = `${newRatio}% corrupt votes`;
+               }
+             });
+         }
+       } else {
+         alert(data.error || 'Error submitting vote');
+       }
+     })
+     .catch(error => {
+       console.error('Error:', error);
+       alert('Error submitting vote. Please try again.');
+     });
+   }
+ });
