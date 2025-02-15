@@ -136,12 +136,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const notCorruptRatio = totalVotes > 0 ? Math.round((judge.not_corrupt_votes / totalVotes) * 100) : 0;
      ribbon.textContent = `${notCorruptRatio}% not corrupt votes`;
      ribbon.style.backgroundColor = '#27ae60'; // Green
+    } else if (judge.status === 'undecided') {
+     ribbon.textContent = 'Undecided';
+        ribbon.style.backgroundColor = '#1e3799'; // Blue
     } else {
-     ribbon.textContent = judge.status === 'undecided' ? 'Undecided' : `${ratio}% corrupt votes`;
-        ribbon.style.backgroundColor = '#c0392b'; // Original red
-    }
+      ribbon.textContent = `${ratio}% corrupt votes`;
+     ribbon.style.backgroundColor = '#c0392b'; // Red
+ }
 
     card.querySelector('.judge-name').textContent = judge.name;
+    card.querySelector('.info strong').nextSibling.textContent = ` ${judge.job_position}`;
+    card.querySelector('.ruling-text').setAttribute('title', judge.ruling);
+    card.querySelector('.ruling-text strong').nextSibling.textContent = ` ${judge.ruling}`;
+    card.querySelector('.btn-row a:nth-child(1)').href = judge.link;
     card.querySelector('.btn-row a:nth-child(2)').href = judge.x_link || '#'; // Use '#' if x_link is null
     if (!judge.x_link) {
         card.querySelector('.btn-row a:nth-child(2)').style.display = 'none'; // Hide if no x_link
