@@ -45,6 +45,28 @@ document.addEventListener('DOMContentLoaded', () => {
             form.reset();
         }
     };
+  // Function to show a temporary notification
+    function showNotification(message, duration = 3000) {
+        const notification = document.createElement('div');
+        notification.className = 'notification';
+        notification.textContent = message;
+        document.body.appendChild(notification);
+
+        // Show the notification
+        setTimeout(() => {
+            notification.style.opacity = '1';
+        }, 100);
+
+        // Hide the notification after the specified duration
+        setTimeout(() => {
+            notification.style.opacity = '0';
+            // Remove the notification from the DOM after the fade-out transition
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 500); // Match the CSS transition time
+        }, duration);
+    }
+
 
     // Handle form submission
     form.onsubmit = (e) => {
@@ -68,7 +90,8 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(response => response.json())
         .then(data => {
             if (data.success) {
-                alert('Judge submission successful! It will be reviewed by an administrator.');
+                //alert('Judge submission successful! It will be reviewed by an administrator.');
+                showNotification('Judge submission successful! It will be reviewed by an administrator.', 5000);
                 modal.style.display = 'none';
                 form.reset();
             } else {
@@ -83,8 +106,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function displayJudges(judges) {
     const updatedJudgeIds = new Set();
-    const confirmedTemplate = document.querySelector('#confirmed-template');
-    const undecidedTemplate = document.querySelector('#undecided-template');
+      const confirmedTemplate = document.querySelector('#confirmed-template');
+      const undecidedTemplate = document.querySelector('#undecided-template');
     const notCorruptTemplate = document.querySelector('#not-corrupt-template');
 
   judges.forEach(judge => {

@@ -249,16 +249,25 @@ main {
     padding: 20px;
     border: 2px solid #002868;
     border-radius: 8px;
-    width: 80%;
-    max-width: 600px;
+    width: 95%; /* Reduced width */
+    max-width: 500px; /* Reduced max-width */
     position: relative;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Added box-shadow */
+}
+
+.modal-header {
+    font-family: 'Roboto', sans-serif; /* Change font */
+    font-size: 1.5em; /* Adjust font size */
+    color: #002868;
+    margin-bottom: 15px; /* Add some spacing */
+    text-align: center; /* Center-align the text */
 }
 
 .close {
     position: absolute;
-    right: 20px;
-    top: 10px;
-    font-size: 28px;
+    right: 10px; /* Adjusted right position */
+    top: 5px; /* Adjusted top position */
+    font-size: 20px; /* Reduced font-size */
     font-weight: bold;
     cursor: pointer;
     color: #002868;
@@ -270,26 +279,29 @@ main {
 
 /* Form Styles */
 .form-group {
-    margin-bottom: 15px;
+    margin-bottom: 25px; /* Increased spacing */
+    padding: 5px 0;
 }
 
 .form-group label {
     display: block;
-    margin-bottom: 5px;
+    margin-bottom: 10px; /* Increased margin for labels */
     color: #002868;
     font-weight: bold;
 }
 
 .form-group input {
     width: 100%;
-    padding: 8px;
-    border: 1px solid #002868;
+    box-sizing: border-box; /* Include padding and border in width */
+    border: 1px solid #ced4da; /* Added a subtle border */
+    box-shadow: none;
     border-radius: 4px;
     font-size: 1em;
+    padding: 12px;
 }
 
 .form-group input:focus {
-    outline: none;
+  outline: none;
     border-color: #bf0a30;
     box-shadow: 0 0 5px rgba(191, 10, 48, 0.3);
 }
@@ -313,4 +325,18 @@ main {
         right: 20px;
         padding: 12px 20px;
     }
+}
+
+.notification {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #4CAF50;
+    color: white;
+    padding: 15px 20px;
+    border-radius: 5px;
+    z-index: 1000;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
 }
