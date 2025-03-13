@@ -60,10 +60,10 @@
                         
                         <div class="button-row">
                             {% set sid = sub[6].split(',')[0] %}
-                            <form action="{{ url_for('handle_submission', submission_id=sid, action='approve') }}" method="post" class="inline-form">
+                            <form method="post" action="/admin/submission/{{ sid }}/approve" class="inline-form">
                                 <button type="submit" class="btn btn-small">Approve</button>
                             </form>
-                            <form action="{{ url_for('handle_submission', submission_id=sid, action='delete') }}" method="post" class="inline-form">
+                            <form method="post" action="/admin/submission/{{ sid }}/delete" class="inline-form">
                                 <button type="submit" class="btn btn-danger btn-small">Delete</button>
                             </form>
                         </div>

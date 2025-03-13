@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geographic Vote Distribution</title>
+    <link rel="stylesheet" href="/static/admin_style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    {% include 'admin_header.html' %}
+    <h1>Geographic Vote Distribution</h1>
+    <canvas id="geoChart"></canvas>
+    <script>
+        fetch('/admin/geo_votes')
+            .then(response => response.json())
+            .then(data => {
+                const labels = data.map(item => item.country_code);
+                const voteCounts = data.map(item => item.vote_count);
+
+                const ctx = document.getElementById('geoChart').getContext('2d');
+                new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Vote Count',
+                            data: voteCounts,
+                            backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            borderWidth: 1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            });
+    </script>
+</body>
+</html>

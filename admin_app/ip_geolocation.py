@@ -9,7 +9,7 @@ import subprocess
 load_dotenv('.env.local')
 
 def get_db_connection():
-    return sqlite3.connect('judges.db')
+    return sqlite3.connect('../judges.db')
 
 def query_db(query, args=(), one=False, commit=True):
     conn = get_db_connection()

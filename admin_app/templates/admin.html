@@ -21,7 +21,7 @@
                         <h3>Add New Judge</h3>
                     </div>
                     <div class="content">
-                        <form method="post" action="{{ url_for('add_judge') }}">
+                        <form method="post" action="/admin/add">
                             <div class="field">
                                 <input type="text" name="name" placeholder="Name" required>
                             </div>
@@ -117,13 +117,13 @@
                         </div>
                         {% endif %}
                         <div class="submission-actions">
-                            <form method="post" action="{{ url_for('handle_submission', submission_id=submission[0], action='approve') }}" class="inline-form">
+                            <form method="post" action="/admin/submission/{{ submission[0] }}/approve" class="inline-form">
                                 <button type="submit" class="btn btn-success">Approve</button>
                             </form>
-                            <form method="post" action="{{ url_for('handle_submission', submission_id=submission[0], action='reject') }}" class="inline-form">
+                            <form method="post" action="/admin/submission/{{ submission[0] }}/reject" class="inline-form">
                                 <button type="submit" class="btn btn-warning">Reject</button>
                             </form>
-                            <form method="post" action="{{ url_for('handle_submission', submission_id=submission[0], action='delete') }}" class="inline-form">
+                            <form method="post" action="/admin/submission/{{ submission[0] }}/delete" class="inline-form">
                                 <button type="submit" class="btn btn-danger">Delete</button>
                             </form>
                         </div>
@@ -151,7 +151,7 @@
                     <h3>Judge #{{ judge[0] }}</h3>
                 </div>
                 <div class="content">
-                    <form id="update-form-{{ judge[0] }}" method="post" action="{{ url_for('update_judge', judge_id=judge[0]) }}">
+                    <form id="update-form-{{ judge[0] }}" method="post" action="/admin/update/{{ judge[0] }}">
                         <div class="field">
                             <input type="text" name="name" placeholder="Name" value="{{ judge[1] }}" required>
                         </div>
@@ -172,49 +172,15 @@
                             <button type="submit" class="btn btn-danger btn-small" form="disable-form-{{ judge[0] }}">{% if judge[6] == 0 %}Enable{% else %}Disable{% endif %}</button>
                         </div>
                     </form>
-                    <form id="disable-form-{{ judge[0] }}" method="post" action="{{ url_for('disable_judge', judge_id=judge[0]) }}" class="inline-form">
+                    <form id="disable-form-{{ judge[0] }}" method="post" action="/admin/disable/{{ judge[0] }}" class="inline-form">
                     </form>
                 </div>
             </div>
             {% endfor %}
         </div>
+    
+
     </main>
-
-    <script>
-        document.addEventListener('DOMContentLoaded', function() {
-            const searchInput = document.getElementById('judgeSearch');
-            const judgeCards = document.querySelectorAll('.judge-card');
-
-            function updateSearch(searchValue) {
-                const searchTerm = searchValue.toLowerCase();
-                
-                judgeCards.forEach(card => {
-                    const cardContent = {
-                        name: card.dataset.name.toLowerCase(),
-                        position: card.dataset.position.toLowerCase(),
-                        ruling: card.dataset.ruling.toLowerCase(),
-                        status: card.dataset.status.toLowerCase()
-                    };
-
-                    const matches = Object.values(cardContent).some(value => 
-                        value && value.includes(searchTerm)
-                    );
-
-                    if (matches || searchTerm.length < 3) {
-                        card.classList.remove('hidden');
-                    } else {
-                        card.classList.add('hidden');
-                    }
-                });
-            }
-
-            searchInput.addEventListener('input', function(e) {
-                const value = this.value.trim();
-                if (value.length >= 3 || value.length === 0) {
-                    updateSearch(value);
-                }
-            });
-        });
-    </script>
+    
 </body>
 </html>

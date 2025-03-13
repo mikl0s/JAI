@@ -1,4 +1,8 @@
-Flask
+flask
+flask_cors
 python-dotenv
 requests
-sqlite3
+gunicorn
+celery
+redis
+Flask-Caching

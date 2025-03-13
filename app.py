@@ -1,17 +1,37 @@
-from flask import Flask, jsonify, render_template, request, redirect, url_for, session, send_from_directory
+from flask import Flask, jsonify, render_template, request, redirect, url_for, send_from_directory
 import sqlite3
 import os
 from datetime import datetime, timedelta
 from functools import wraps
-from ip_geolocation import get_ip_geolocation, format_geolocation_data
+from flask import Flask, jsonify, render_template, request, redirect, url_for, send_from_directory
+import sqlite3
+import os
+from datetime import datetime, timedelta
+from functools import wraps
+from flask_cors import CORS
+import secrets
+import hmac
+import hashlib
+import time
+from flask_caching import Cache  # Import Flask-Caching
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'your_secret_key')
-app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
-app.config['SESSION_COOKIE_SECURE'] = True
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+# !!! IMPORTANT !!!  Move this to an environment variable in production.
+app.config['HMAC_SECRET_KEY'] = secrets.token_hex(32)  # Generate a 64-character hex key
+app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'your_secret_key') # TODO consider removing, not used in main app
+
+# Flask-Caching configuration
+# Use SimpleCache for development, switch to Redis/Memcached in production
+cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})  # TODO: Configure for Redis in production
+
+# Removed session config: not needed for the main app
+# app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+# app.config['SESSION_COOKIE_SECURE'] = True
+# app.config['SESSION_COOKIE_HTTPONLY'] = True
+# app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
+
+CORS(app)  # Enable CORS for all routes.  TODO: Configure for specific origin in production.
 
 @app.route('/favicon.ico')
 def favicon():
@@ -28,13 +48,12 @@ def query_db(query, args=(), one=False, commit=True):
     conn.close()
     return (rv[0] if rv else None) if one else rv
 
-def log_admin_action(action, details=None):
-    admin_username = session.get('username', 'unknown')
-    ip_address = request.remote_addr
-    query_db('''
-        INSERT INTO admin_logs (admin_username, action, details, ip_address)
-        VALUES (?, ?, ?, ?)
-    ''', (admin_username, action, details, ip_address))
+def get_client_ip():
+    """Retrieves the client's IP address, accounting for Cloudflare proxy."""
+    if 'CF-Connecting-IP' in request.headers:
+        return request.headers.get('CF-Connecting-IP')
+    else:
+        return request.remote_addr
 
 def is_ip_whitelisted(ip_address):
     result = query_db('''
@@ -43,18 +62,11 @@ def is_ip_whitelisted(ip_address):
     ''', (ip_address, datetime.now().isoformat()), one=True)
     return bool(result)
 
-def add_ip_to_whitelist(ip_address, reason, hours=24):
-    expiry = (datetime.now() + timedelta(hours=hours)).isoformat()
-    query_db('''
-        INSERT OR REPLACE INTO ip_whitelist (ip_address, reason, expiry)
-        VALUES (?, ?, ?)
-    ''', (ip_address, reason, expiry))
-
 def check_rate_limit(ip_address):
-    # Always allow localhost for testing
+    # Always allow localhost for testing and whitelisted IPs
     if ip_address == '127.0.0.1' or is_ip_whitelisted(ip_address):
         return True
-    
+
     # Check submissions in last 10 minutes
     ten_mins_ago = (datetime.now() - timedelta(minutes=10)).isoformat()
     recent_submissions = query_db('''
@@ -64,12 +76,48 @@ def check_rate_limit(ip_address):
     
     return recent_submissions == 0
 
-def admin_required(f):
+def verify_proof_of_work(nonce, hash, difficulty):
+    target_prefix = '0' * difficulty
+    data = f'nonce:{nonce}'
+    message_data = data.encode('utf-8')
+    calculated_hash = hashlib.sha256(message_data).hexdigest()
+    return calculated_hash == hash and calculated_hash.startswith(target_prefix)
+
+def hmac_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
-        if not session.get('logged_in'):
-            return redirect(url_for('login'))
+        # Get timestamp and signature from headers
+        timestamp = request.headers.get('X-HMAC-Timestamp')
+        received_signature = request.headers.get('X-HMAC-Signature')
+
+        if not timestamp or not received_signature:
+            return jsonify({'success': False, 'error': 'Missing HMAC headers'}), 401
+
+        # Check timestamp validity (within 5 minutes)
+        try:
+            timestamp = int(timestamp)
+            if time.time() - timestamp > 300:  # 300 seconds = 5 minutes
+                return jsonify({'success': False, 'error': 'Timestamp expired'}), 401
+        except ValueError:
+            return jsonify({'success': False, 'error': 'Invalid timestamp format'}), 401
+
+        # Reconstruct the message for signature verification
+        message = request.method + request.path
+        if request.get_data():
+            message += request.get_data().decode('utf-8')  # Important: Decode for consistent hashing
+        message += str(timestamp)
+
+        # Calculate the expected signature
+        secret_key_bytes = app.config['HMAC_SECRET_KEY'].encode('utf-8')
+        message_bytes = message.encode('utf-8')
+        expected_signature = hmac.new(secret_key_bytes, message_bytes, hashlib.sha256).hexdigest()
+
+        # Compare signatures
+        if not hmac.compare_digest(expected_signature, received_signature):
+            return jsonify({'success': False, 'error': 'Invalid HMAC signature'}), 401
+
         return f(*args, **kwargs)
+
     return decorated_function
 
 @app.route('/')
@@ -77,46 +125,54 @@ def index():
     return render_template('index.html')
 
 @app.route('/judges')
+@cache.cached(timeout=60)  # Cache this view for 60 seconds
 def get_judges():
+    # Get the USA filter parameter
+    usa_only = request.args.get('usa_only', 'false').lower() == 'true'
+
     # Get judges with vote counts
     judges = query_db('''
         SELECT j.*,
             COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
             COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
+            , v.ip_address
         FROM judges j
         LEFT JOIN votes v ON j.id = v.judge_id
+        LEFT JOIN ip_geolocation geo ON v.ip_address = geo.ip_address
         WHERE j.displayed = 1
-        GROUP BY j.id
-    ''')
-    
-    # Determine status based on vote ratios
+        GROUP BY j.id, geo.country_code2
+        HAVING (NOT ?1) OR (geo.country_code2 = 'US')
+    ''', (usa_only,))
+
+   # Determine status based on vote ratios
     judges_with_status = []
     for judge in judges:
-        total_votes = judge[-2] + judge[-1]
+        total_votes = judge[-3] + judge[-2]
         status = 'undecided'
         if total_votes >= 5:
-            corrupt_ratio = judge[-2] / total_votes if total_votes > 0 else 0
-            not_corrupt_ratio = judge[-1] / total_votes if total_votes > 0 else 0
-            if corrupt_ratio >= 0.8333:  # 5/6 = 0.8333... (5:1 ratio)
+            corrupt_ratio = judge[-3] / total_votes
+            not_corrupt_ratio = judge[-2] / total_votes
+            if corrupt_ratio >= 0.8333:
                 status = 'corrupt'
-            elif not_corrupt_ratio >= 0.8333: # 5:1 ratio for not_corrupt
+            elif not_corrupt_ratio >= 0.8333:
                 status = 'not_corrupt'
 
         judges_with_status.append({
-            **dict(zip(['id', 'name', 'job_position', 'ruling', 'link', 'x_link', 'displayed'], judge[:-2])),
-            'corrupt_votes': judge[-2],
-            'not_corrupt_votes': judge[-1],
+            **dict(zip(['id', 'name', 'job_position', 'ruling', 'link', 'x_link', 'displayed'], judge[:-3])),
+            'corrupt_votes': judge[-3],
+            'not_corrupt_votes': judge[-2],
             'status': status
         })
-    
+
     return jsonify({'judges': judges_with_status})
 
 @app.route('/vote/<int:judge_id>', methods=['POST'])
+@hmac_required
 def submit_vote(judge_id):
-    ip_address = request.remote_addr
+    ip_address = get_client_ip()
     data = request.json
-    
-    # Check if judge exists
+
+    #Check if judge exists
     judge = query_db('SELECT * FROM judges WHERE id = ? AND displayed = 1', (judge_id,), one=True)
     if not judge:
         return jsonify({'success': False, 'error': 'Judge not found'}), 404
@@ -140,38 +196,30 @@ def submit_vote(judge_id):
     vote_type = data.get('vote_type')
     if vote_type not in ['corrupt', 'not_corrupt']:
         return jsonify({'success': False, 'error': 'Invalid vote type'}), 400
-    
+
+    # Verify proof of work
+    proof_of_work = data.get('proofOfWork')
+    if not proof_of_work:
+        return jsonify({'success': False, 'error': 'Missing proof of work'}), 400
+    if not verify_proof_of_work(proof_of_work.get('nonce'), proof_of_work.get('hash'), 4):  # Use difficulty 4
+        return jsonify({'success': False, 'error': 'Invalid proof of work'}), 400
+
     # Insert vote
     try:
         query_db('''
             INSERT INTO votes (judge_id, ip_address, vote_type, browser_fingerprint)
             VALUES (?, ?, ?, ?)
-        ''', (judge_id, ip_address, vote_type, data.get('fingerprint', '')))
-        
+        ''', (judge_id, ip_address, vote_type, data.get('fingerprint')))
+
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
-@app.route('/login', methods=['GET', 'POST'])
-def login():
-    if request.method == 'POST':
-        username = request.form['username']
-        password = request.form['password']
-        if username == 'admin' and password == 'admin':
-            session['logged_in'] = True
-            session['username'] = username
-            # Whitelist admin IP
-            add_ip_to_whitelist(request.remote_addr, 'admin login')
-            log_admin_action('login')
-            return redirect(url_for('admin'))
-        else:
-            return "Invalid credentials", 401
-    return render_template('login.html')
-
 @app.route('/submit-judge', methods=['POST'])
+@hmac_required
 def submit_judge():
-    ip_address = request.remote_addr
-    
+    ip_address = get_client_ip()
+
     if not check_rate_limit(ip_address):
         return jsonify({
             'success': False, 
@@ -181,8 +229,21 @@ def submit_judge():
     data = request.json
     try:
         # Cache IP geolocation data immediately
-        get_ip_geolocation(ip_address)
+        get_ip_geolocation_task.delay(ip_address)
+
+        # Honeypot check
+        if data.get('honeypot'):
+            # log_admin_action('honeypot_triggered', f'IP: {ip_address}')  # Removed: log_admin_action is in admin app
+            return jsonify({'success': False, 'error': 'Submission rejected'}), 400  # Reject submission
         
+        # Verify proof of work
+        proof_of_work = data.get('proofOfWork')
+        if not proof_of_work:
+            return jsonify({'success': False, 'error': 'Missing proof of work'}), 400
+        if not verify_proof_of_work(proof_of_work.get('nonce'), proof_of_work.get('hash'), 4):  # Use difficulty 4
+            return jsonify({'success': False, 'error': 'Invalid proof of work'}), 400
+
+
         query_db('''
             INSERT INTO submissions (name, position, ruling, link, x_link, ip_address)
             VALUES (?, ?, ?, ?, ?, ?)
@@ -192,209 +253,6 @@ def submit_judge():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/admin')
-@admin_required
-def admin():
-    judges = query_db('SELECT * FROM judges')
-    
-    # Get submission stats
-    stats = query_db('''
-        SELECT 
-            status,
-            COUNT(*) as count
-        FROM submissions
-        GROUP BY status
-    ''')
-    
-    stats_dict = {
-        'pending': 0,
-        'approved': 0,
-        'rejected': 0
-    }
-    for status, count in stats:
-        stats_dict[status] = count
-    
-    return render_template('admin.html', 
-                         judges=judges,
-                         stats=stats_dict,
-                         active_page='dashboard')
-
-@app.route('/admin/pending')
-@admin_required
-def admin_pending():
-    # Get submissions grouped by judge name
-    submissions = query_db('''
-        SELECT
-            name,
-            position,
-            ruling,
-            link,
-            x_link,
-            COUNT(*) as submission_count,
-            GROUP_CONCAT(id) as submission_ids,
-            GROUP_CONCAT(ip_address) as ip_addresses,
-            MIN(submitted_at) as first_submitted,
-            GROUP_CONCAT(
-                COALESCE(
-                    (SELECT country_name || '|' || country_code2 || '|' || country_flag
-                     FROM ip_geolocation
-                     WHERE ip_geolocation.ip_address = submissions.ip_address
-                     LIMIT 1),
-                    'Unknown|XX|https://flagcdn.com/16x12/xx.png'
-                )
-            ) as locations
-        FROM submissions
-        WHERE status = "pending"
-        GROUP BY name, position, ruling, link, x_link
-        ORDER BY first_submitted ASC
-    ''')
-    
-    return render_template('admin_pending.html',
-                         submissions=submissions,
-                         active_page='pending')
-@app.route('/admin/logs')
-@admin_required
-def admin_logs():
-    # Get all admin actions
-    recent_actions = query_db('''
-        SELECT admin_username, action, details, ip_address, timestamp
-        FROM admin_logs
-        ORDER BY timestamp DESC
-        LIMIT 50
-    ''')
-    
-    # Fetch geolocation data for each IP
-    actions_with_location = []
-    for action in recent_actions:
-        admin_username, action_type, details, ip_address, timestamp = action
-        geo_data = get_ip_geolocation(ip_address)
-        location = format_geolocation_data(geo_data) if geo_data else "Location unknown"
-        actions_with_location.append((
-            admin_username, action_type, details, ip_address, timestamp, location
-        ))
-    
-    return render_template('admin_logs.html',
-                         recent_actions=actions_with_location,
-                         active_page='logs')
-
-@app.route('/admin/submission/<int:submission_id>/<action>', methods=['POST'])
-@admin_required
-def handle_submission(submission_id, action):
-    if action == 'approve':
-        # Get submission data
-        submission = query_db('SELECT * FROM submissions WHERE id = ?', (submission_id,), one=True)
-        if submission:
-            # Add to judges table
-            query_db('''
-                INSERT INTO judges (name, job_position, ruling, link, x_link)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (submission[1], submission[2], submission[3], submission[4], submission[5]))
-            
-            # Update submission status
-            query_db('UPDATE submissions SET status = "approved" WHERE id = ?', (submission_id,))
-            log_admin_action('approve_submission', f'Approved submission {submission_id}')
-    
-    elif action == 'reject':
-        query_db('UPDATE submissions SET status = "rejected" WHERE id = ?', (submission_id,))
-        log_admin_action('reject_submission', f'Rejected submission {submission_id}')
-    
-    elif action == 'delete':
-        query_db('DELETE FROM submissions WHERE id = ?', (submission_id,))
-        log_admin_action('delete_submission', f'Deleted submission {submission_id}')
-    
-    return redirect(url_for('admin_pending'))
-
-@app.route('/admin/add', methods=['POST'])
-@admin_required
-def add_judge():
-    name = request.form['name']
-    job_position = request.form['job_position']
-    ruling = request.form['ruling']
-    link = request.form['ruling_link']
-    x_link = request.form['relevant_link']
-    
-    query_db('''
-        INSERT INTO judges (name, job_position, ruling, link, x_link)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (name, job_position, ruling, link, x_link))
-    
-    log_admin_action('add_judge', f'Added judge {name}')
-    return redirect(url_for('admin'))
-
-@app.route('/admin/update/<int:judge_id>', methods=['POST'])
-@admin_required
-def update_judge(judge_id):
-    name = request.form['name']
-    job_position = request.form['job_position']
-    ruling = request.form['ruling']
-    link = request.form['ruling_link']
-    x_link = request.form['relevant_link']
-    
-    query_db('''
-        UPDATE judges
-        SET name = ?, job_position = ?, ruling = ?, link = ?, x_link = ?
-        WHERE id = ?
-    ''', (name, job_position, ruling, link, x_link, judge_id))
-    
-    log_admin_action('update_judge', f'Updated judge {judge_id}')
-    return redirect(url_for('admin'))
-
-@app.route('/admin/disable/<int:judge_id>', methods=['POST'])
-@admin_required
-def disable_judge(judge_id):
-    # Get current displayed state
-    current_state = query_db('SELECT displayed FROM judges WHERE id = ?', (judge_id,), one=True)[0]
-    # Set to 0 to disable, 1 to enable
-    new_state = 0 if current_state == 1 else 1
-    query_db('UPDATE judges SET displayed = ? WHERE id = ?', (new_state, judge_id))
-    action = 'enable' if new_state == 1 else 'disable'
-    log_admin_action(f'{action}_judge', f'{action.capitalize()}d judge {judge_id}')
-    return redirect(url_for('admin'))
-
-@app.route('/logout', methods=['POST'])
-def logout():
-    if session.get('logged_in'):
-        log_admin_action('logout')
-    session.clear()
-    return redirect(url_for('admin'))
-
-@app.route('/admin/recalculate_status', methods=['POST'])
-@admin_required
-def recalculate_status():
-    # Get all judges with vote counts
-    judges = query_db('''
-        SELECT j.*,
-            COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
-            COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
-        FROM judges j
-        LEFT JOIN votes v ON j.id = v.judge_id
-        GROUP BY j.id
-    ''')
-
-    # Recalculate status and update database
-    for judge in judges:
-        judge_id = judge[0]
-        total_votes = judge[-2] + judge[-1]
-        status = 'undecided'
-        if total_votes >= 5:
-            corrupt_ratio = judge[-2] / total_votes if total_votes > 0 else 0
-            not_corrupt_ratio = judge[-1] / total_votes if total_votes > 0 else 0
-            if corrupt_ratio >= 0.8333:
-                status = 'corrupt'
-            elif not_corrupt_ratio >= 0.8333:
-                status = 'not_corrupt'
-
-        query_db('UPDATE judges SET status = ? WHERE id = ?', (status, judge_id))
-
-    log_admin_action('recalculate_status', 'Recalculated judge statuses based on vote counts')
-    return redirect(url_for('admin'))
-
-
-# Ensure localhost is whitelisted
-try:
-    add_ip_to_whitelist('127.0.0.1', 'localhost testing', hours=8760) # 1 year
-except sqlite3.IntegrityError:
-    pass  # Already exists
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('FLASK_RUN_PORT', 5000))
+    app.run(debug=True, port=port)

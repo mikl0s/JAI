@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Suspicious Votes</title>
+    <link rel="stylesheet" href="/static/admin_style.css">
+</head>
+<body>
+    {% include 'admin_header.html' %}
+    <h1>Suspicious Votes</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Judge ID</th>
+                <th>IP Address</th>
+                <th>Vote Count</th>
+                <th>Country</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for judge_id, ip_address, vote_count, country_name in suspicious_ips %}
+                <tr>
+                    <td>{{ judge_id }}</td>
+                    <td>{{ ip_address }}</td>
+                    <td>{{ vote_count }}</td>
+                    <td>{{ country_name if country_name else 'Unknown' }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+     <h2>Suspicious Fingerprints</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Judge ID</th>
+                <th>Fingerprint</th>
+                <th>Vote Count</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for judge_id, fingerprint, vote_count in suspicious_fingerprints %}
+                <tr>
+                    <td>{{ judge_id }}</td>
+                    <td>{{ fingerprint }}</td>
+                    <td>{{ vote_count }}</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {# TODO: Add table for rapid ratio changes #}
+</body>
+</html>
