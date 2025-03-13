@@ -1,62 +1,255 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Submission Analysis</title>
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='antarctica.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
-<body>
-    {% include 'admin_header.html' %}
-    
-    <main class="main-content">
-        <div class="card">
-            <div class="header">
-                <h3>Submission Analysis</h3>
-            </div>
-            <div class="content">
-                <div class="chart-container" style="position: relative; height:400px; width:100%">
-                    <canvas id="submissionChart"></canvas>
-                </div>
-                
-                <div class="chart-container" style="position: relative; height:400px; width:100%; margin-top: 30px;">
-                    <canvas id="submissionStatusChart"></canvas>
-                </div>
-                
-                {% if data and data.submissions|length > 0 %}
-                <div class="stats-container">
-                    <div class="stat-box">
-                        <h4>Total Submissions</h4>
-                        <p class="stat-value">{{ data.total_count }}</p>
-                    </div>
-                    <div class="stat-box">
-                        <h4>Approved</h4>
-                        <p class="stat-value">{{ data.approved_count }}</p>
-                    </div>
-                    <div class="stat-box">
-                        <h4>Pending</h4>
-                        <p class="stat-value">{{ data.pending_count }}</p>
-                    </div>
-                    <div class="stat-box">
-                        <h4>Rejected</h4>
-                        <p class="stat-value">{{ data.rejected_count }}</p>
-                    </div>
-                </div>
-                {% else %}
-                <div class="empty-state">
-                    <p>No submission data available yet. As users submit judges, data will appear here.</p>
-                </div>
-                {% endif %}
+{% extends 'base.html' %}
+
+{% block title %}Submission Analysis{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="mb-2">Submission Analysis</h1>
+    <p class="text-secondary">Analyze submission trends and statistics.</p>
+</div>
+
+<div class="grid-4">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_submissions }}</div>
+        <div class="stat-label">Total Submissions</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ approved_submissions }}</div>
+        <div class="stat-label">Approved</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ rejected_submissions }}</div>
+        <div class="stat-label">Rejected</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value">{{ pending_submissions }}</div>
+        <div class="stat-label">Pending</div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="header">
+        <h3>Submission Trends</h3>
+    </div>
+    <div class="content">
+        <div class="chart-container">
+            <canvas id="submissionTrends"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="grid-2 mt-4">
+    <div class="card">
+        <div class="header">
+            <h3>Approval Rate</h3>
+        </div>
+        <div class="content">
+            <div class="chart-container">
+                <canvas id="approvalRateChart"></canvas>
             </div>
         </div>
-    </main>
+    </div>
     
-    <!-- Hidden data element for JavaScript to access -->
-    <div id="page-data" data-page-data='{{ data|tojson|safe }}' style="display: none;"></div>
+    <div class="card">
+        <div class="header">
+            <h3>Submission Sources</h3>
+        </div>
+        <div class="content">
+            <div class="chart-container">
+                <canvas id="sourcesChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Submission trends chart
+        const trendsData = {
+            labels: [
+                {% for trend in submission_trends %}
+                '{{ trend[0].strftime("%Y-%m-%d") }}',
+                {% endfor %}
+            ],
+            datasets: [{
+                label: 'Submissions',
+                data: [
+                    {% for trend in submission_trends %}
+                    {{ trend[1] }},
+                    {% endfor %}
+                ],
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 2,
+                tension: 0.1
+            }]
+        };
+        
+        new Chart(
+            document.getElementById('submissionTrends').getContext('2d'),
+            {
+                type: 'line',
+                data: trendsData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                precision: 0
+                            }
+                        }
+                    }
+                }
+            }
+        );
+        
+        // Approval rate chart
+        const approvalData = {
+            labels: ['Approved', 'Rejected', 'Pending'],
+            datasets: [{
+                data: [
+                    {{ approved_submissions }},
+                    {{ rejected_submissions }},
+                    {{ pending_submissions }}
+                ],
+                backgroundColor: [
+                    'rgba(75, 192, 192, 0.7)',
+                    'rgba(255, 99, 132, 0.7)',
+                    'rgba(255, 205, 86, 0.7)'
+                ],
+                borderColor: [
+                    'rgba(75, 192, 192, 1)',
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(255, 205, 86, 1)'
+                ],
+                borderWidth: 1
+            }]
+        };
+        
+        new Chart(
+            document.getElementById('approvalRateChart').getContext('2d'),
+            {
+                type: 'doughnut',
+                data: approvalData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            }
+        );
+        
+        // Mock data for sources chart (replace with real data when available)
+        const sourcesData = {
+            labels: ['Direct', 'Social Media', 'Email', 'Other'],
+            datasets: [{
+                label: 'Submission Sources',
+                data: [65, 25, 5, 5],
+                backgroundColor: [
+                    'rgba(54, 162, 235, 0.7)',
+                    'rgba(255, 99, 132, 0.7)',
+                    'rgba(75, 192, 192, 0.7)',
+                    'rgba(255, 205, 86, 0.7)'
+                ],
+                borderWidth: 1
+            }]
+        };
+        
+        new Chart(
+            document.getElementById('sourcesChart').getContext('2d'),
+            {
+                type: 'pie',
+                data: sourcesData,
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            }
+        );
+    });
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .grid-4 {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.5rem;
+    }
     
-    <!-- Import modular JavaScript -->
-    <script type="module" src="/static/js/main.js"></script>
-</body>
-</html>
+    .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1.5rem;
+    }
+    
+    .stat-card {
+        background-color: var(--bg-primary);
+        border-radius: 8px;
+        padding: 1.5rem;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        text-align: center;
+        transition: transform 0.2s;
+    }
+    
+    .stat-card:hover {
+        transform: translateY(-5px);
+    }
+    
+    .stat-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        color: var(--primary);
+        margin-bottom: 0.5rem;
+    }
+    
+    .stat-label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+    }
+    
+    .chart-container {
+        height: 300px;
+        position: relative;
+    }
+    
+    .mt-4 {
+        margin-top: 1.5rem;
+    }
+    
+    @media (max-width: 992px) {
+        .grid-4 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .grid-2 {
+            grid-template-columns: 1fr;
+        }
+    }
+    
+    @media (max-width: 576px) {
+        .grid-4 {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}

@@ -1,50 +1,57 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin - Action Logs</title>
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='antarctica.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
-</head>
-<body>
-    {% include 'admin_header.html' %}
-    <main class="main-content">
-        <div class="card">
-            <div class="header">
-                <h3>Admin Action Logs</h3>
-            </div>
-            <div class="content">
-                {% if recent_actions %}
-                    <table class="admin-actions-table">
-                        <thead>
-                            <tr>
-                                <th>Admin</th>
-                                <th>Action</th>
-                                <th>Details</th>
-                                <th>IP Address</th>
-                                <th>Location</th>
-                                <th>Timestamp</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for action in recent_actions %}
-                            <tr>
-                                <td>{{ action['admin_username'] }}</td>
-                                <td>{{ action['action'] }}</td>
-                                <td>{{ action['details'] if action['details'] else '-' }}</td>
-                                <td>{{ action['ip_address'] }}</td>
-                                <td>{{ action['location'] }}</td>
-                                <td>{{ action['timestamp'] }}</td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                {% else %}
-                    <p>No recent actions.</p>
-                {% endif %}
-            </div>
+{% extends 'base.html' %}
+
+{% block title %}Admin Logs{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="mb-2">Admin Logs</h1>
+    <p class="text-secondary">Track all administrative actions performed in the system.</p>
+</div>
+
+<div class="card">
+    <div class="header">
+        <h3>Activity Logs</h3>
+        <div class="search-container" style="width: 300px; margin: 0;">
+            <input type="text" id="logSearch" class="search-input" placeholder="Search logs..." data-target="logsList">
         </div>
-    </main>
-</body>
-</html>
+    </div>
+    <div class="content">
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Action</th>
+                        <th>Message</th>
+                        <th>Timestamp</th>
+                    </tr>
+                </thead>
+                <tbody id="logsList">
+                    {% for log in logs %}
+                    <tr class="searchable-item">
+                        <td>#{{ log.id }}</td>
+                        <td>
+                            {% if log.action == 'add' %}
+                            <span class="badge badge-success">ADD</span>
+                            {% elif log.action == 'delete' %}
+                            <span class="badge badge-danger">DEL</span>
+                            {% elif log.action == 'update' %}
+                            <span class="badge badge-info">UPD</span>
+                            {% elif log.action == 'login' %}
+                            <span class="badge badge-info">LOGIN</span>
+                            {% elif log.action == 'logout' %}
+                            <span class="badge badge-warning">LOGOUT</span>
+                            {% else %}
+                            <span class="badge badge-secondary">{{ log.action|upper }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ log.message }}</td>
+                        <td>{{ log.timestamp }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -8,12 +8,18 @@ from functools import wraps
 from ip_geolocation import get_ip_geolocation, format_geolocation_data
 from flask_caching import Cache
 from dotenv import load_dotenv
+from flask_session import Session
 
 # Load environment variables from .env
 load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'your_admin_secret_key')
+app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SESSION_PERMANENT'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=24)
+Session(app)
+
 # Configure other settings as needed, potentially different from the main app
 
 # Flask-Caching configuration
@@ -71,6 +77,18 @@ def admin_required(f):
             return redirect(url_for('login'))
         return f(*args, **kwargs)
     return decorated_function
+
+# Set theme preference
+@app.route('/admin/set_theme', methods=['POST'])
+@admin_required
+def set_theme():
+    theme = request.form.get('theme', 'light')
+    session['theme_preference'] = theme
+    return redirect(request.referrer or url_for('admin'))
+
+# Get theme preference from session or default to system preference
+def get_theme_preference():
+    return session.get('theme_preference', 'system')
 
 # --- New Routes for v0.7.0 ---
 

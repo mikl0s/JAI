@@ -1,82 +1,146 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Geographic Vote Distribution</title>
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='antarctica.png') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        .data-section {
-            margin-bottom: 30px;
-            padding: 20px;
-            background-color: #f9f9f9;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        .data-section h2 {
-            margin-top: 0;
-            color: #333;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 10px;
-        }
-        .chart-container {
-            height: 400px;
-            margin-top: 20px;
-        }
-        .chart-row {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            margin-top: 20px;
-        }
-        .chart-col {
-            flex: 1;
-            min-width: 300px;
-        }
-    </style>
-</head>
-<body>
-    {% include 'admin_header.html' %}
-    <h1>Geographic Vote Distribution</h1>
-    
-    <div class="data-section">
-        <h2>Votes by Country</h2>
-        <div class="chart-container">
-            <canvas id="countryChart"></canvas>
+{% extends 'base.html' %}
+
+{% block title %}Geographic Vote Analysis{% endblock %}
+
+{% block content %}
+<div class="mb-4">
+    <h1 class="mb-2">Geographic Vote Analysis</h1>
+    <p class="text-secondary">Analyze voting patterns by geographic location.</p>
+</div>
+
+<div class="grid-2-1">
+    <div class="card">
+        <div class="header">
+            <h3>Top Countries by Vote Count</h3>
         </div>
-    </div>
-    
-    <div class="data-section">
-        <h2>Regional Distribution for Top Countries</h2>
-        <div class="chart-container">
-            <canvas id="regionChart"></canvas>
-        </div>
-    </div>
-    
-    <div class="data-section">
-        <h2>Temporal Distribution</h2>
-        <div class="chart-row">
-            <div class="chart-col">
-                <h3>Votes by Hour of Day (Last 7 Days)</h3>
-                <div class="chart-container">
-                    <canvas id="hourlyChart"></canvas>
-                </div>
-            </div>
-            <div class="chart-col">
-                <h3>Votes by Day of Week (Last 30 Days)</h3>
-                <div class="chart-container">
-                    <canvas id="dailyChart"></canvas>
-                </div>
+        <div class="content">
+            <div class="chart-container">
+                <canvas id="countryChart"></canvas>
             </div>
         </div>
     </div>
     
-    <!-- Hidden data element for JavaScript to access -->
-    <div id="page-data" data-page-data='{{ data|tojson|safe }}' style="display: none;"></div>
+    <div class="card">
+        <div class="header">
+            <h3>Region Distribution</h3>
+        </div>
+        <div class="content">
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Country</th>
+                            <th>Region</th>
+                            <th>Votes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in region_distribution %}
+                        <tr>
+                            <td>
+                                <span class="country-code">{{ item[0] }}</span>
+                                {{ item[1] }}
+                            </td>
+                            <td>{{ item[2] }}</td>
+                            <td>{{ item[3] }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mt-4">
+    <div class="header">
+        <h3>Vote Distribution Map</h3>
+    </div>
+    <div class="content">
+        <div id="map" style="height: 500px;"></div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Chart for top countries
+        const countryData = [
+            {% for country in top_countries %}
+            { country: '{{ country[0] }}', votes: {{ country[1] }} },
+            {% endfor %}
+        ];
+        
+        const ctx = document.getElementById('countryChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: countryData.map(function(item) { return item.country; }),
+                datasets: [{
+                    label: 'Vote Count',
+                    data: countryData.map(function(item) { return item.votes; }),
+                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                }
+            }
+        });
+        
+        // Initialize map
+        const map = L.map('map').setView([20, 0], 2);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+        
+        // Add markers for each country
+        // This is just a placeholder - in a real implementation, you would need
+        // to have the latitude and longitude for each country
+    });
+</script>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .country-code {
+        display: inline-block;
+        padding: 0.25rem 0.5rem;
+        background-color: var(--bg-tertiary);
+        border-radius: 4px;
+        margin-right: 0.5rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
     
-    <!-- Import modular JavaScript -->
-    <script type="module" src="/static/js/main.js"></script>
-</body>
-</html>
+    .chart-container {
+        height: 300px;
+        position: relative;
+    }
+    
+    .grid-2-1 {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 1.5rem;
+    }
+    
+    @media (max-width: 768px) {
+        .grid-2-1 {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
+{% endblock %}
