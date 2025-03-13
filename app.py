@@ -125,42 +125,67 @@ def index():
     return render_template('index.html')
 
 @app.route('/judges')
-@cache.cached(timeout=60)  # Cache this view for 60 seconds
+@cache.cached(timeout=60, query_string=True)  # Cache this view for 60 seconds and vary by query string
 def get_judges():
-    # Get the USA filter parameter
-    usa_only = request.args.get('usa_only', 'false').lower() == 'true'
-
-    # Get judges with vote counts
-    judges = query_db('''
-        SELECT j.*,
-            COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
-            COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
-            , v.ip_address
+    # Get all judges with displayed=1
+    judges_query = '''
+        SELECT j.*
         FROM judges j
-        LEFT JOIN votes v ON j.id = v.judge_id
-        LEFT JOIN ip_geolocation geo ON v.ip_address = geo.ip_address
         WHERE j.displayed = 1
-        GROUP BY j.id, geo.country_code2
-        HAVING (NOT ?1) OR (geo.country_code2 = 'US')
-    ''', (usa_only,))
-
-   # Determine status based on vote ratios
+    '''
+    
+    judges_data = query_db(judges_query)
+    
+    # Process each judge to get their vote counts
     judges_with_status = []
-    for judge in judges:
-        total_votes = judge[-3] + judge[-2]
+    for judge in judges_data:
+        judge_id = judge[0]
+        
+        # Get all votes count
+        votes_query = '''
+            SELECT 
+                COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
+                COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
+            FROM votes v
+            WHERE v.judge_id = ?
+        '''
+        
+        vote_counts = query_db(votes_query, (judge_id,), one=True)
+        corrupt_votes = vote_counts[0] if vote_counts else 0
+        not_corrupt_votes = vote_counts[1] if vote_counts else 0
+        
+        # Get US-specific vote counts
+        us_votes_query = '''
+            SELECT 
+                COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
+                COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
+            FROM votes v
+            JOIN ip_geolocation g ON v.ip_address = g.ip_address
+            WHERE v.judge_id = ? AND g.country_code2 = 'US'
+        '''
+        
+        us_vote_counts = query_db(us_votes_query, (judge_id,), one=True)
+        us_corrupt_votes = us_vote_counts[0] if us_vote_counts else 0
+        us_not_corrupt_votes = us_vote_counts[1] if us_vote_counts else 0
+        
+        # Determine status based on vote ratios
+        total_votes = corrupt_votes + not_corrupt_votes
         status = 'undecided'
         if total_votes >= 5:
-            corrupt_ratio = judge[-3] / total_votes
-            not_corrupt_ratio = judge[-2] / total_votes
+            corrupt_ratio = corrupt_votes / total_votes if total_votes > 0 else 0
+            not_corrupt_ratio = not_corrupt_votes / total_votes if total_votes > 0 else 0
             if corrupt_ratio >= 0.8333:
                 status = 'corrupt'
             elif not_corrupt_ratio >= 0.8333:
                 status = 'not_corrupt'
-
+        
+        # Create judge object with all vote data
         judges_with_status.append({
-            **dict(zip(['id', 'name', 'job_position', 'ruling', 'link', 'x_link', 'displayed'], judge[:-3])),
-            'corrupt_votes': judge[-3],
-            'not_corrupt_votes': judge[-2],
+            **dict(zip(['id', 'name', 'job_position', 'ruling', 'link', 'x_link', 'displayed'], judge)),
+            'corrupt_votes': corrupt_votes,
+            'not_corrupt_votes': not_corrupt_votes,
+            'us_corrupt_votes': us_corrupt_votes,
+            'us_not_corrupt_votes': us_not_corrupt_votes,
             'status': status
         })
 
