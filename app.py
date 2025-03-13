@@ -1,19 +1,20 @@
-from flask import Flask, jsonify, render_template, request, redirect, url_for, send_from_directory
-import sqlite3
+from flask import Flask, jsonify, render_template, request, redirect, url_for, send_from_directory, session
 import os
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, jsonify, render_template, request, redirect, url_for, send_from_directory
-import sqlite3
-import os
-from datetime import datetime, timedelta
-from functools import wraps
+import psycopg2
+import psycopg2.extras
+from psycopg2.extras import RealDictCursor
 from flask_cors import CORS
 import secrets
 import hmac
 import hashlib
 import time
+from dotenv import load_dotenv
 from flask_caching import Cache  # Import Flask-Caching
+
+# Load environment variables from .env.local
+load_dotenv('.env.local')
 
 app = Flask(__name__)
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -38,15 +39,27 @@ def favicon():
     return send_from_directory(os.path.join(app.root_path, 'static'),
                              'favicon.ico', mimetype='image/vnd.microsoft.icon')
 
+def get_db_connection():
+    conn = psycopg2.connect(
+        host=os.environ.get('DB_HOST', 'localhost'),
+        port=os.environ.get('DB_PORT', '5432'),
+        dbname=os.environ.get('DB_NAME', 'jai_db'),
+        user=os.environ.get('DB_USER', 'jai'),
+        password=os.environ.get('DB_PASSWORD', '')
+    )
+    conn.autocommit = True
+    return conn
+
 def query_db(query, args=(), one=False, commit=True):
-    conn = sqlite3.connect('judges.db')
-    cur = conn.cursor()
+    conn = get_db_connection()
+    cur = conn.cursor(cursor_factory=RealDictCursor if one else None)
     cur.execute(query, args)
     if commit:
         conn.commit()
     rv = cur.fetchall()
+    cur.close()
     conn.close()
-    return (rv[0] if rv else None) if one else rv
+    return (dict(rv[0]) if rv else None) if one else rv
 
 def get_client_ip():
     """Retrieves the client's IP address, accounting for Cloudflare proxy."""
@@ -58,7 +71,7 @@ def get_client_ip():
 def is_ip_whitelisted(ip_address):
     result = query_db('''
         SELECT * FROM ip_whitelist 
-        WHERE ip_address = ? AND expiry > ?
+        WHERE ip_address = %s AND expiry > %s
     ''', (ip_address, datetime.now().isoformat()), one=True)
     return bool(result)
 
@@ -71,7 +84,7 @@ def check_rate_limit(ip_address):
     ten_mins_ago = (datetime.now() - timedelta(minutes=10)).isoformat()
     recent_submissions = query_db('''
         SELECT COUNT(*) FROM submissions 
-        WHERE ip_address = ? AND submitted_at > ?
+        WHERE ip_address = %s AND submitted_at > %s
     ''', (ip_address, ten_mins_ago), one=True)[0]
     
     return recent_submissions == 0
@@ -147,12 +160,12 @@ def get_judges():
                 COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
                 COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
             FROM votes v
-            WHERE v.judge_id = ?
+            WHERE v.judge_id = %s
         '''
         
         vote_counts = query_db(votes_query, (judge_id,), one=True)
-        corrupt_votes = vote_counts[0] if vote_counts else 0
-        not_corrupt_votes = vote_counts[1] if vote_counts else 0
+        corrupt_votes = vote_counts['corrupt_votes'] if vote_counts else 0
+        not_corrupt_votes = vote_counts['not_corrupt_votes'] if vote_counts else 0
         
         # Get US-specific vote counts
         us_votes_query = '''
@@ -161,12 +174,12 @@ def get_judges():
                 COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
             FROM votes v
             JOIN ip_geolocation g ON v.ip_address = g.ip_address
-            WHERE v.judge_id = ? AND g.country_code2 = 'US'
+            WHERE v.judge_id = %s AND g.country_code2 = 'US'
         '''
         
         us_vote_counts = query_db(us_votes_query, (judge_id,), one=True)
-        us_corrupt_votes = us_vote_counts[0] if us_vote_counts else 0
-        us_not_corrupt_votes = us_vote_counts[1] if us_vote_counts else 0
+        us_corrupt_votes = us_vote_counts['corrupt_votes'] if us_vote_counts else 0
+        us_not_corrupt_votes = us_vote_counts['not_corrupt_votes'] if us_vote_counts else 0
         
         # Determine status based on vote ratios
         total_votes = corrupt_votes + not_corrupt_votes
@@ -198,7 +211,7 @@ def submit_vote(judge_id):
     data = request.json
 
     #Check if judge exists
-    judge = query_db('SELECT * FROM judges WHERE id = ? AND displayed = 1', (judge_id,), one=True)
+    judge = query_db('SELECT * FROM judges WHERE id = %s AND displayed = 1', (judge_id,), one=True)
     if not judge:
         return jsonify({'success': False, 'error': 'Judge not found'}), 404
     
@@ -206,7 +219,7 @@ def submit_vote(judge_id):
     if not is_ip_whitelisted(ip_address):
         last_vote = query_db('''
             SELECT created_at FROM votes
-            WHERE ip_address = ? AND judge_id = ?
+            WHERE ip_address = %s AND judge_id = %s
             ORDER BY created_at DESC
             LIMIT 1
         ''', (ip_address, judge_id), one=True)
@@ -233,7 +246,7 @@ def submit_vote(judge_id):
     try:
         query_db('''
             INSERT INTO votes (judge_id, ip_address, vote_type, browser_fingerprint)
-            VALUES (?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s)
         ''', (judge_id, ip_address, vote_type, data.get('fingerprint')))
 
         return jsonify({'success': True})
@@ -271,7 +284,7 @@ def submit_judge():
 
         query_db('''
             INSERT INTO submissions (name, position, ruling, link, x_link, ip_address)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s)
         ''', (data['name'], data['position'],
               data['ruling'], data['link'], data['x_link'], ip_address))
         return jsonify({'success': True})

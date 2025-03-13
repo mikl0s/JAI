@@ -3,50 +3,192 @@
 <head>
     <title>Suspicious Votes</title>
     <link rel="stylesheet" href="/static/admin_style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        .data-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #f9f9f9;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .data-section h2 {
+            margin-top: 0;
+            color: #333;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        th, td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        tr:hover {
+            background-color: #f5f5f5;
+        }
+        .chart-container {
+            height: 300px;
+            margin-top: 20px;
+        }
+        .alert-high {
+            color: #721c24;
+            background-color: #f8d7da;
+        }
+        .alert-medium {
+            color: #856404;
+            background-color: #fff3cd;
+        }
+    </style>
 </head>
 <body>
     {% include 'admin_header.html' %}
-    <h1>Suspicious Votes</h1>
-    <table>
-        <thead>
-            <tr>
-                <th>Judge ID</th>
-                <th>IP Address</th>
-                <th>Vote Count</th>
-                <th>Country</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for judge_id, ip_address, vote_count, country_name in suspicious_ips %}
+    <h1>Suspicious Voting Activity</h1>
+    
+    <div class="data-section">
+        <h2>Hourly Vote Distribution (Last 24 Hours)</h2>
+        <div class="chart-container">
+            <canvas id="hourlyVoteChart"></canvas>
+        </div>
+    </div>
+    
+    <div class="data-section">
+        <h2>Rapid Vote Ratio Changes</h2>
+        {% if ratio_changes %}
+        <table>
+            <thead>
                 <tr>
-                    <td>{{ judge_id }}</td>
-                    <td>{{ ip_address }}</td>
-                    <td>{{ vote_count }}</td>
-                    <td>{{ country_name if country_name else 'Unknown' }}</td>
+                    <th>Judge</th>
+                    <th>Previous Corrupt %</th>
+                    <th>Current Corrupt %</th>
+                    <th>Change %</th>
+                    <th>Total Votes Before</th>
+                    <th>Total Votes Now</th>
+                    <th>New Votes</th>
                 </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+            </thead>
+            <tbody>
+                {% for change in ratio_changes %}
+                    <tr class="{% if change.ratio_change > 25 %}alert-high{% elif change.ratio_change > 15 %}alert-medium{% endif %}">
+                        <td>{{ change.judge_name }} (ID: {{ change.judge_id }})</td>
+                        <td>{{ change.corrupt_ratio_before }}%</td>
+                        <td>{{ change.corrupt_ratio_now }}%</td>
+                        <td>{{ change.ratio_change }}%</td>
+                        <td>{{ change.votes_before }}</td>
+                        <td>{{ change.votes_now }}</td>
+                        <td>{{ change.new_votes }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No significant ratio changes detected.</p>
+        {% endif %}
+    </div>
+    
+    <div class="data-section">
+        <h2>Suspicious IP Addresses</h2>
+        {% if suspicious_ips %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Judge</th>
+                    <th>IP Address</th>
+                    <th>Vote Count</th>
+                    <th>Country</th>
+                    <th>Latest Vote</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for judge_id, ip_address, vote_count, judge_name, country_name, latest_vote in suspicious_ips %}
+                    <tr class="{% if vote_count > 10 %}alert-high{% elif vote_count > 5 %}alert-medium{% endif %}">
+                        <td>{{ judge_name }} (ID: {{ judge_id }})</td>
+                        <td>{{ ip_address }}</td>
+                        <td>{{ vote_count }}</td>
+                        <td>{{ country_name if country_name else 'Unknown' }}</td>
+                        <td>{{ latest_vote }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No suspicious IP activity detected.</p>
+        {% endif %}
+    </div>
 
-     <h2>Suspicious Fingerprints</h2>
-    <table>
-        <thead>
-            <tr>
-                <th>Judge ID</th>
-                <th>Fingerprint</th>
-                <th>Vote Count</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for judge_id, fingerprint, vote_count in suspicious_fingerprints %}
+    <div class="data-section">
+        <h2>Suspicious Fingerprints</h2>
+        {% if suspicious_fingerprints %}
+        <table>
+            <thead>
                 <tr>
-                    <td>{{ judge_id }}</td>
-                    <td>{{ fingerprint }}</td>
-                    <td>{{ vote_count }}</td>
+                    <th>Judge</th>
+                    <th>Fingerprint</th>
+                    <th>Vote Count</th>
+                    <th>Latest Vote</th>
                 </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {# TODO: Add table for rapid ratio changes #}
+            </thead>
+            <tbody>
+                {% for judge_id, fingerprint, vote_count, judge_name, latest_vote in suspicious_fingerprints %}
+                    <tr class="{% if vote_count > 10 %}alert-high{% elif vote_count > 5 %}alert-medium{% endif %}">
+                        <td>{{ judge_name }} (ID: {{ judge_id }})</td>
+                        <td>{{ fingerprint }}</td>
+                        <td>{{ vote_count }}</td>
+                        <td>{{ latest_vote }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p>No suspicious fingerprint activity detected.</p>
+        {% endif %}
+    </div>
+    
+    <script>
+        // Hourly vote chart
+        const hourlyLabels = Array.from({length: 24}, (_, i) => i.toString().padStart(2, '0') + ':00');
+        const hourlyData = JSON.parse('{{ hourly_votes|tojson|safe }}');
+        
+        new Chart(document.getElementById('hourlyVoteChart').getContext('2d'), {
+            type: 'bar',
+            data: {
+                labels: hourlyLabels,
+                datasets: [{
+                    label: 'Votes per Hour',
+                    data: hourlyData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Votes'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Hour of Day (24h format)'
+                        }
+                    }
+                }
+            }
+        });
+    </script>
 </body>
 </html>

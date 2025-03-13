@@ -1,7 +1,9 @@
 import os
 import requests
 from datetime import datetime
-import sqlite3
+import psycopg2
+import psycopg2.extras
+from psycopg2.extras import RealDictCursor
 from dotenv import load_dotenv
 import subprocess
 
@@ -9,17 +11,26 @@ import subprocess
 load_dotenv('.env.local')
 
 def get_db_connection():
-    return sqlite3.connect('../judges.db')
+    conn = psycopg2.connect(
+        host=os.environ.get('DB_HOST', 'localhost'),
+        port=os.environ.get('DB_PORT', '5432'),
+        dbname=os.environ.get('DB_NAME', 'jai_db'),
+        user=os.environ.get('DB_USER', 'jai'),
+        password=os.environ.get('DB_PASSWORD', '')
+    )
+    conn.autocommit = True
+    return conn
 
 def query_db(query, args=(), one=False, commit=True):
     conn = get_db_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=RealDictCursor if one else None)
     cur.execute(query, args)
     if commit:
         conn.commit()
     rv = cur.fetchall()
+    cur.close()
     conn.close()
-    return (rv[0] if rv else None) if one else rv
+    return (dict(rv[0]) if rv else None) if one else rv
 
 def get_external_ip():
     """
@@ -61,14 +72,14 @@ def get_ip_geolocation(ip_address):
             # Update any existing records in the database
             query_db('''
                 UPDATE ip_geolocation 
-                SET ip_address = ? 
+                SET ip_address = %s 
                 WHERE ip_address IN ('127.0.0.1', 'localhost')
             ''', (external_ip,))
 
     # Check cache first
     cached = query_db('''
         SELECT * FROM ip_geolocation 
-        WHERE ip_address = ?
+        WHERE ip_address = %s
     ''', (ip_address,), one=True)
     
     if cached:
@@ -99,7 +110,7 @@ def get_ip_geolocation(ip_address):
                 is_eu, country_flag, country_emoji,
                 isp, organization, timezone_name, timezone_offset,
                 currency_code, currency_symbol
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         ''', (
             data.get('ip'),
             data.get('hostname'),
@@ -126,7 +137,7 @@ def get_ip_geolocation(ip_address):
             data.get('currency', {}).get('symbol')
         ))
 
-        return query_db('SELECT * FROM ip_geolocation WHERE ip_address = ?', 
+        return query_db('SELECT * FROM ip_geolocation WHERE ip_address = %s', 
                        (ip_address,), one=True)
     
     except Exception as e:

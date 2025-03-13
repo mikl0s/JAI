@@ -1,10 +1,16 @@
 from flask import Flask, jsonify, render_template, request, redirect, url_for, session, send_from_directory
-import sqlite3
+import psycopg2
+import psycopg2.extras
+from psycopg2.extras import RealDictCursor
 import os
 from datetime import datetime, timedelta
 from functools import wraps
 from ip_geolocation import get_ip_geolocation, format_geolocation_data
 from flask_caching import Cache
+from dotenv import load_dotenv
+
+# Load environment variables from .env
+load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('FLASK_SECRET_KEY', 'your_admin_secret_key')
@@ -17,19 +23,26 @@ cache = Cache(app, config={'CACHE_TYPE': 'SimpleCache'})  # TODO: Configure for 
 
 # Database connection function (adjust as needed if using a different db setup)
 def get_db_connection():
-    conn = sqlite3.connect('../judges.db')  # Correct relative path
-    conn.row_factory = sqlite3.Row
+    conn = psycopg2.connect(
+        host=os.environ.get('DB_HOST', 'localhost'),
+        port=os.environ.get('DB_PORT', '5432'),
+        dbname=os.environ.get('DB_NAME', 'jai_db'),
+        user=os.environ.get('DB_USER', 'jai'),
+        password=os.environ.get('DB_PASSWORD', '')
+    )
+    conn.autocommit = True
     return conn
 
 def query_db(query, args=(), one=False, commit=True):
     conn = get_db_connection()
-    cur = conn.cursor()
+    cur = conn.cursor(cursor_factory=RealDictCursor if one else None)
     cur.execute(query, args)
     if commit:
         conn.commit()
     rv = cur.fetchall()
+    cur.close()
     conn.close()
-    return (rv[0] if rv else None) if one else rv
+    return (dict(rv[0]) if rv else None) if one else rv
 
 def get_client_ip():
     """Retrieves the client's IP address, accounting for Cloudflare proxy."""
@@ -43,7 +56,7 @@ def log_admin_action(action, details=None):
     ip_address = get_client_ip()
     query_db('''
         INSERT INTO admin_logs (admin_username, action, details, ip_address)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
     ''', (admin_username, action, details, ip_address))
 
 def admin_required(f):
@@ -64,67 +77,314 @@ def suspicious_votes():
     # 2. High vote frequency from a single fingerprint within a short time period.
     # 3. Rapid changes in vote ratio for a judge.
 
-    # TODO: Define thresholds (these are just examples)
-    ip_vote_threshold = 10  # Votes per IP per hour
-    fingerprint_vote_threshold = 10  # Votes per fingerprint per hour
-    ratio_change_threshold = 0.2  # 20% change in ratio within an hour
+    # Define thresholds for suspicious activity
+    ip_vote_threshold = 5  # Votes per IP per hour
+    fingerprint_vote_threshold = 5  # Votes per fingerprint per hour
+    ratio_change_threshold = 0.15  # 15% change in ratio within an hour
 
     # Get suspicious votes based on IP frequency
     suspicious_ips = query_db('''
-        SELECT judge_id, ip_address, COUNT(*) as vote_count,
-        (SELECT country_name FROM ip_geolocation WHERE ip_address = v.ip_address LIMIT 1) as country_name
+        SELECT 
+            v.judge_id, 
+            v.ip_address, 
+            COUNT(*) as vote_count,
+            (SELECT name FROM judges WHERE id = v.judge_id) as judge_name,
+            (SELECT country_name FROM ip_geolocation WHERE ip_address = v.ip_address LIMIT 1) as country_name,
+            MAX(v.created_at) as latest_vote
         FROM votes v
-        WHERE created_at > DATETIME('now', '-1 hour')
-        GROUP BY judge_id, ip_address
-        HAVING COUNT(*) > ?
+        WHERE v.created_at > NOW() - INTERVAL '1 hour'
+        GROUP BY v.judge_id, v.ip_address
+        HAVING COUNT(*) >= %s
+        ORDER BY vote_count DESC, latest_vote DESC
     ''', (ip_vote_threshold,))
 
     # Get suspicious votes based on fingerprint frequency
     suspicious_fingerprints = query_db('''
-        SELECT judge_id, browser_fingerprint, COUNT(*) as vote_count
-        FROM votes
-        WHERE created_at > DATETIME('now', '-1 hour')
-        GROUP BY judge_id, browser_fingerprint
-        HAVING COUNT(*) > ?
+        SELECT 
+            v.judge_id, 
+            v.browser_fingerprint, 
+            COUNT(*) as vote_count,
+            (SELECT name FROM judges WHERE id = v.judge_id) as judge_name,
+            MAX(v.created_at) as latest_vote
+        FROM votes v
+        WHERE v.created_at > NOW() - INTERVAL '1 hour'
+        GROUP BY v.judge_id, v.browser_fingerprint
+        HAVING COUNT(*) >= %s
+        ORDER BY vote_count DESC, latest_vote DESC
     ''', (fingerprint_vote_threshold,))
 
-    # TODO: Implement logic for detecting rapid ratio changes
+    # Detect rapid ratio changes
+    # First, get vote counts from an hour ago
+    judges_data = query_db('''
+        SELECT 
+            j.id as judge_id,
+            j.name as judge_name,
+            (SELECT COUNT(*) FROM votes 
+             WHERE judge_id = j.id AND vote_type = 'corrupt' AND created_at <= NOW() - INTERVAL '1 hour') as corrupt_votes_before,
+            (SELECT COUNT(*) FROM votes 
+             WHERE judge_id = j.id AND vote_type = 'not_corrupt' AND created_at <= NOW() - INTERVAL '1 hour') as not_corrupt_votes_before,
+            (SELECT COUNT(*) FROM votes 
+             WHERE judge_id = j.id AND vote_type = 'corrupt') as corrupt_votes_now,
+            (SELECT COUNT(*) FROM votes 
+             WHERE judge_id = j.id AND vote_type = 'not_corrupt') as not_corrupt_votes_now
+        FROM judges j
+        WHERE j.displayed = 1
+    ''')
+    
+    ratio_changes = []
+    for judge in judges_data:
+        judge_id, judge_name, corrupt_before, not_corrupt_before, corrupt_now, not_corrupt_now = judge
+        
+        # Calculate ratios
+        total_before = corrupt_before + not_corrupt_before
+        total_now = corrupt_now + not_corrupt_now
+        
+        # Skip judges with too few votes
+        if total_before < 10 or total_now < 10:
+            continue
+            
+        corrupt_ratio_before = corrupt_before / total_before if total_before > 0 else 0
+        corrupt_ratio_now = corrupt_now / total_now if total_now > 0 else 0
+        
+        ratio_change = abs(corrupt_ratio_now - corrupt_ratio_before)
+        
+        if ratio_change >= ratio_change_threshold:
+            ratio_changes.append({
+                'judge_id': judge_id,
+                'judge_name': judge_name,
+                'corrupt_ratio_before': round(corrupt_ratio_before * 100, 1),
+                'corrupt_ratio_now': round(corrupt_ratio_now * 100, 1),
+                'ratio_change': round(ratio_change * 100, 1),
+                'votes_before': total_before,
+                'votes_now': total_now,
+                'new_votes': total_now - total_before
+            })
+    
+    # Sort by ratio change (descending)
+    ratio_changes.sort(key=lambda x: x['ratio_change'], reverse=True)
 
-    return render_template('suspicious_votes.html', active_page='suspicious_votes',
+    # Get recent voting patterns (last 24 hours)
+    recent_votes = query_db('''
+        SELECT 
+            EXTRACT(HOUR FROM created_at) as hour,
+            COUNT(*) as vote_count
+        FROM votes
+        WHERE created_at > NOW() - INTERVAL '24 hours'
+        GROUP BY hour
+        ORDER BY hour
+    ''')
+    
+    hourly_votes = [0] * 24
+    for hour, count in recent_votes:
+        hourly_votes[int(hour)] = count
+
+    return render_template('suspicious_votes.html', 
+                           active_page='suspicious_votes',
                            suspicious_ips=suspicious_ips,
-                           suspicious_fingerprints=suspicious_fingerprints)
+                           suspicious_fingerprints=suspicious_fingerprints,
+                           ratio_changes=ratio_changes,
+                           hourly_votes=hourly_votes)
 
 @app.route('/admin/geo_votes')
 @admin_required
 def geo_votes():
-    vote_distribution = query_db('''
+    # Get vote distribution by country
+    country_distribution = query_db('''
         SELECT
             COALESCE(geo.country_code2, 'Unknown') as country_code,
+            COALESCE(geo.country_name, 'Unknown') as country_name,
             COUNT(*) as vote_count
         FROM votes v
         LEFT JOIN ip_geolocation geo ON v.ip_address = geo.ip_address
-        GROUP BY country_code
+        GROUP BY country_code, country_name
+        ORDER BY vote_count DESC
     ''')
+    
+    # Get vote distribution by region (for top 5 countries)
+    top_countries = [row[0] for row in country_distribution[:5] if row[0] != 'Unknown']
+    
+    region_distribution = []
+    if top_countries:
+        placeholders = ','.join(['%s'] * len(top_countries))
+        region_distribution = query_db(f'''
+            SELECT
+                geo.country_code2 as country_code,
+                geo.country_name as country_name,
+                COALESCE(geo.region, 'Unknown') as region,
+                COUNT(*) as vote_count
+            FROM votes v
+            JOIN ip_geolocation geo ON v.ip_address = geo.ip_address
+            WHERE geo.country_code2 IN ({placeholders})
+            GROUP BY country_code, country_name, region
+            ORDER BY country_name, vote_count DESC
+        ''', top_countries)
+    
+    # Get vote distribution by time of day (hourly)
+    hourly_distribution = query_db('''
+        SELECT 
+            EXTRACT(HOUR FROM created_at) as hour,
+            COUNT(*) as vote_count
+        FROM votes
+        WHERE created_at > NOW() - INTERVAL '7 days'
+        GROUP BY hour
+        ORDER BY hour
+    ''')
+    
+    hourly_data = [0] * 24
+    for hour, count in hourly_distribution:
+        hourly_data[int(hour)] = count
+    
+    # Get vote distribution by day of week
+    daily_distribution = query_db('''
+        SELECT 
+            EXTRACT(DOW FROM created_at) as day_of_week,
+            COUNT(*) as vote_count
+        FROM votes
+        WHERE created_at > NOW() - INTERVAL '30 days'
+        GROUP BY day_of_week
+        ORDER BY day_of_week
+    ''')
+    
+    daily_data = [0] * 7
+    for day, count in daily_distribution:
+        daily_data[day] = count
+    
+    # Format data for template
+    data = {
+        'countries': [{'country_code': row[0], 'country_name': row[1], 'vote_count': row[2]} for row in country_distribution],
+        'regions': [{'country_code': row[0], 'country_name': row[1], 'region': row[2], 'vote_count': row[3]} for row in region_distribution],
+        'hourly': hourly_data,
+        'daily': daily_data
+    }
 
-    # Transform to list of dicts for easy JSON serialization
-    data = [{'country_code': row[0], 'vote_count': row[1]} for row in vote_distribution]
-
-    return jsonify(data)
+    return render_template('geo_votes.html', active_page='geo_votes', data=data)
 
 @app.route('/admin/vote_analysis')
 @admin_required
 def vote_analysis():
-    # Placeholder data for now
+    # Get overall vote distribution
+    vote_types = query_db('''
+        SELECT 
+            vote_type, 
+            COUNT(*) as count
+        FROM votes
+        GROUP BY vote_type
+        ORDER BY count DESC
+    ''')
+    
+    # Get vote trends over time (last 30 days by day)
+    vote_trends = query_db('''
+        SELECT 
+            DATE(created_at) as vote_date,
+            vote_type,
+            COUNT(*) as count
+        FROM votes
+        WHERE created_at > NOW() - INTERVAL '30 days'
+        GROUP BY vote_date, vote_type
+        ORDER BY vote_date
+    ''')
+    
+    # Process vote trends data for chart
+    dates = []
+    corrupt_counts = []
+    not_corrupt_counts = []
+    undecided_counts = []
+    
+    current_date = None
+    corrupt = 0
+    not_corrupt = 0
+    undecided = 0
+    
+    for row in vote_trends:
+        vote_date, vote_type, count = row
+        
+        if current_date != vote_date:
+            if current_date is not None:
+                dates.append(current_date)
+                corrupt_counts.append(corrupt)
+                not_corrupt_counts.append(not_corrupt)
+                undecided_counts.append(undecided)
+            
+            current_date = vote_date
+            corrupt = 0
+            not_corrupt = 0
+            undecided = 0
+        
+        if vote_type == 'corrupt':
+            corrupt = count
+        elif vote_type == 'not_corrupt':
+            not_corrupt = count
+        else:  # undecided
+            undecided = count
+    
+    # Add the last date
+    if current_date is not None:
+        dates.append(current_date)
+        corrupt_counts.append(corrupt)
+        not_corrupt_counts.append(not_corrupt)
+        undecided_counts.append(undecided)
+    
+    # Get top judges by vote count
+    top_judges = query_db('''
+        SELECT 
+            j.id,
+            j.name,
+            COUNT(v.id) as vote_count
+        FROM judges j
+        JOIN votes v ON j.id = v.judge_id
+        GROUP BY j.id
+        ORDER BY vote_count DESC
+        LIMIT 10
+    ''')
+    
+    # Get vote distribution for top 5 judges
+    top_judge_ids = [row[0] for row in top_judges[:5]]
+    
+    judge_vote_distribution = []
+    if top_judge_ids:
+        placeholders = ','.join(['%s'] * len(top_judge_ids))
+        judge_vote_distribution = query_db(f'''
+            SELECT 
+                j.id,
+                j.name,
+                v.vote_type,
+                COUNT(v.id) as vote_count
+            FROM judges j
+            JOIN votes v ON j.id = v.judge_id
+            WHERE j.id IN ({placeholders})
+            GROUP BY j.id, j.name, v.vote_type
+            ORDER BY j.name, v.vote_type
+        ''', top_judge_ids)
+    
+    # Process judge vote distribution data
+    judge_data = {}
+    for row in judge_vote_distribution:
+        judge_id, judge_name, vote_type, vote_count = row
+        
+        if judge_name not in judge_data:
+            judge_data[judge_name] = {'corrupt': 0, 'not_corrupt': 0, 'undecided': 0}
+        
+        judge_data[judge_name][vote_type] = vote_count
+    
+    # Prepare data for template
     data = {
-        'labels': ['Corrupt', 'Not Corrupt', 'Undecided'],
-        'datasets': [{
-            'label': 'Vote Distribution',
-            'data': [120, 50, 30],  # Example data
-            'backgroundColor': ['rgba(255, 99, 132, 0.5)', 'rgba(75, 192, 192, 0.5)', 'rgba(255, 205, 86, 0.5)'],
-            'borderColor': ['rgba(255, 99, 132, 1)', 'rgba(75, 192, 192, 1)', 'rgba(255, 205, 86, 1)'],
-            'borderWidth': 1
-        }]
+        'vote_types': {
+            'labels': [row[0].replace('_', ' ').title() for row in vote_types],
+            'counts': [row[1] for row in vote_types]
+        },
+        'vote_trends': {
+            'dates': dates,
+            'corrupt': corrupt_counts,
+            'not_corrupt': not_corrupt_counts,
+            'undecided': undecided_counts
+        },
+        'top_judges': {
+            'names': [row[1] for row in top_judges],
+            'counts': [row[2] for row in top_judges]
+        },
+        'judge_vote_distribution': judge_data
     }
+    
     return render_template('vote_analysis.html', active_page='vote_analysis', data=data)
 
 @app.route('/admin/submission_analysis')
@@ -198,17 +458,18 @@ def admin_pending():
             link,
             x_link,
             COUNT(*) as submission_count,
-            GROUP_CONCAT(id) as submission_ids,
-            GROUP_CONCAT(ip_address) as ip_addresses,
+            STRING_AGG(id::text, ',') as submission_ids,
+            STRING_AGG(ip_address, ',') as ip_addresses,
             MIN(submitted_at) as first_submitted,
-            GROUP_CONCAT(
+            STRING_AGG(
                 COALESCE(
                     (SELECT country_name || '|' || country_code2 || '|' || country_flag
                      FROM ip_geolocation
                      WHERE ip_geolocation.ip_address = submissions.ip_address
                      LIMIT 1),
                     'Unknown|XX|https://flagcdn.com/16x12/xx.png'
-                )
+                ),
+                ','
             ) as locations
         FROM submissions
         WHERE status = "pending"
@@ -250,24 +511,24 @@ def admin_logs():
 def handle_submission(submission_id, action):
     if action == 'approve':
         # Get submission data
-        submission = query_db('SELECT * FROM submissions WHERE id = ?', (submission_id,), one=True)
+        submission = query_db('SELECT * FROM submissions WHERE id = %s', (submission_id,), one=True)
         if submission:
             # Add to judges table
             query_db('''
                 INSERT INTO judges (name, job_position, ruling, link, x_link)
-                VALUES (?, ?, ?, ?, ?)
-            ''', (submission[1], submission[2], submission[3], submission[4], submission[5]))
+                VALUES (%s, %s, %s, %s, %s)
+            ''', (submission['name'], submission['position'], submission['ruling'], submission['link'], submission['x_link']))
             
             # Update submission status
-            query_db('UPDATE submissions SET status = "approved" WHERE id = ?', (submission_id,))
+            query_db('UPDATE submissions SET status = "approved" WHERE id = %s', (submission_id,))
             log_admin_action('approve_submission', f'Approved submission {submission_id}')
     
     elif action == 'reject':
-        query_db('UPDATE submissions SET status = "rejected" WHERE id = ?', (submission_id,))
+        query_db('UPDATE submissions SET status = "rejected" WHERE id = %s', (submission_id,))
         log_admin_action('reject_submission', f'Rejected submission {submission_id}')
     
     elif action == 'delete':
-        query_db('DELETE FROM submissions WHERE id = ?', (submission_id,))
+        query_db('DELETE FROM submissions WHERE id = %s', (submission_id,))
         log_admin_action('delete_submission', f'Deleted submission {submission_id}')
     
     return redirect(url_for('admin_pending'))
@@ -283,7 +544,7 @@ def add_judge():
     
     query_db('''
         INSERT INTO judges (name, job_position, ruling, link, x_link)
-        VALUES (?, ?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s, %s)
     ''', (name, job_position, ruling, link, x_link))
     
     log_admin_action('add_judge', f'Added judge {name}')
@@ -300,8 +561,8 @@ def update_judge(judge_id):
     
     query_db('''
         UPDATE judges
-        SET name = ?, job_position = ?, ruling = ?, link = ?, x_link = ?
-        WHERE id = ?
+        SET name = %s, job_position = %s, ruling = %s, link = %s, x_link = %s
+        WHERE id = %s
     ''', (name, job_position, ruling, link, x_link, judge_id))
     
     log_admin_action('update_judge', f'Updated judge {judge_id}')
@@ -311,10 +572,10 @@ def update_judge(judge_id):
 @admin_required
 def disable_judge(judge_id):
     # Get current displayed state
-    current_state = query_db('SELECT displayed FROM judges WHERE id = ?', (judge_id,), one=True)[0]
+    current_state = query_db('SELECT displayed FROM judges WHERE id = %s', (judge_id,), one=True)['displayed']
     # Set to 0 to disable, 1 to enable
     new_state = 0 if current_state == 1 else 1
-    query_db('UPDATE judges SET displayed = ? WHERE id = ?', (new_state, judge_id))
+    query_db('UPDATE judges SET displayed = %s WHERE id = %s', (new_state, judge_id))
     action = 'enable' if new_state == 1 else 'disable'
     log_admin_action(f'{action}_judge', f'{action.capitalize()}d judge {judge_id}')
     return redirect(url_for('admin'))
@@ -352,7 +613,7 @@ def recalculate_status():
             elif not_corrupt_ratio >= 0.8333:
                 status = 'not_corrupt'
 
-        query_db('UPDATE judges SET status = ? WHERE id = ?', (status, judge_id))
+        query_db('UPDATE judges SET status = %s WHERE id = %s', (status, judge_id))
 
     log_admin_action('recalculate_status', 'Recalculated judge statuses based on vote counts')
     return redirect(url_for('admin'))

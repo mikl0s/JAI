@@ -32,7 +32,7 @@ Current Version: 0.5.0
     - [ ] Geographic vote distribution visualization (admin interface)
     - [ ] Automated alerts system (for suspicious activity)
     - [ ] Enhanced admin dashboard
-    - [ ] Toggle on frontpage floating bottom left - show all votes or just votes from USA
+    - [x] Toggle on frontpage floating bottom left - show all votes or just votes from USA
     - [ ] Separate data analysis page in the dashboard for votes and submissions
 
 - [ ] **Update 0.8.0:** Database Migration
