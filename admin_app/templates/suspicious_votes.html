@@ -1,8 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Suspicious Votes</title>
-    <link rel="stylesheet" href="/static/admin_style.css">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='antarctica.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .data-section {
@@ -152,43 +155,10 @@
         {% endif %}
     </div>
     
-    <script>
-        // Hourly vote chart
-        const hourlyLabels = Array.from({length: 24}, (_, i) => i.toString().padStart(2, '0') + ':00');
-        const hourlyData = JSON.parse('{{ hourly_votes|tojson|safe }}');
-        
-        new Chart(document.getElementById('hourlyVoteChart').getContext('2d'), {
-            type: 'bar',
-            data: {
-                labels: hourlyLabels,
-                datasets: [{
-                    label: 'Votes per Hour',
-                    data: hourlyData,
-                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        title: {
-                            display: true,
-                            text: 'Number of Votes'
-                        }
-                    },
-                    x: {
-                        title: {
-                            display: true,
-                            text: 'Hour of Day (24h format)'
-                        }
-                    }
-                }
-            }
-        });
-    </script>
+    <!-- Hidden data element for JavaScript to access -->
+    <div id="page-data" data-hourly-votes='{{ hourly_votes|tojson|safe }}' style="display: none;"></div>
+    
+    <!-- Import modular JavaScript -->
+    <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

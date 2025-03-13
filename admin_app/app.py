@@ -54,10 +54,15 @@ def get_client_ip():
 def log_admin_action(action, details=None):
     admin_username = session.get('username', 'unknown')
     ip_address = get_client_ip()
-    query_db('''
-        INSERT INTO admin_logs (admin_username, action, details, ip_address)
-        VALUES (%s, %s, %s, %s)
-    ''', (admin_username, action, details, ip_address))
+    try:
+        query_db('''
+            INSERT INTO admin_logs (admin_username, action, details, ip_address)
+            VALUES (%s, %s, %s, %s)
+        ''', (admin_username, action, details, ip_address))
+    except Exception as e:
+        print(f"Error logging admin action: {e}")
+        # Continue execution even if logging fails
+        pass
 
 def admin_required(f):
     @wraps(f)
@@ -210,12 +215,12 @@ def geo_votes():
             SELECT
                 geo.country_code2 as country_code,
                 geo.country_name as country_name,
-                COALESCE(geo.region, 'Unknown') as region,
+                COALESCE(geo.continent_name, 'Unknown') as region,
                 COUNT(*) as vote_count
             FROM votes v
             JOIN ip_geolocation geo ON v.ip_address = geo.ip_address
             WHERE geo.country_code2 IN ({placeholders})
-            GROUP BY country_code, country_name, region
+            GROUP BY country_code, country_name, continent_name
             ORDER BY country_name, vote_count DESC
         ''', top_countries)
     
@@ -247,7 +252,7 @@ def geo_votes():
     
     daily_data = [0] * 7
     for day, count in daily_distribution:
-        daily_data[day] = count
+        daily_data[int(day)] = count
     
     # Format data for template
     data = {
@@ -390,20 +395,115 @@ def vote_analysis():
 @app.route('/admin/submission_analysis')
 @admin_required
 def submission_analysis():
-    # Placeholder data for now
+    # Get submission statistics by status
+    status_counts = query_db('''
+        SELECT status, COUNT(*) as count
+        FROM submissions
+        GROUP BY status
+    ''')
+    
+    # Get submission counts by date
+    date_counts = query_db('''
+        SELECT DATE(submitted_at) as date, COUNT(*) as count
+        FROM submissions
+        GROUP BY DATE(submitted_at)
+        ORDER BY date ASC
+    ''')
+    
+    # Get top submitters by IP
+    top_submitters = query_db('''
+        SELECT ip_address, COUNT(*) as count
+        FROM submissions
+        GROUP BY ip_address
+        ORDER BY count DESC
+        LIMIT 10
+    ''')
+    
+    # Get all submissions for detailed analysis
+    submissions = query_db('''
+        SELECT id, name, position, ruling, status, ip_address, submitted_at
+        FROM submissions
+        ORDER BY submitted_at DESC
+        LIMIT 100
+    ''')
+    
+    # Process status counts
+    pending_count = 0
+    approved_count = 0
+    rejected_count = 0
+    
+    for item in status_counts:
+        if item[0] == 'pending':
+            pending_count = item[1]
+        elif item[0] == 'approved':
+            approved_count = item[1]
+        elif item[0] == 'rejected':
+            rejected_count = item[1]
+    
+    total_count = pending_count + approved_count + rejected_count
+    
+    # Format data for charts
     data = {
-        'labels': ['Pending', 'Approved', 'Rejected'],
-        'datasets': [{
-            'label': 'Submission Status',
-            'data': [20, 150, 10],  # Example data
-            'backgroundColor': ['rgba(255, 205, 86, 0.5)', 'rgba(75, 192, 192, 0.5)', 'rgba(255, 99, 132, 0.5)'],
-            'borderColor': ['rgba(255, 205, 86, 1)', 'rgba(75, 192, 192, 1)', 'rgba(255, 99, 132, 1)'],
-            'borderWidth': 1
-        }]
+        'status': {
+            'labels': ['Pending', 'Approved', 'Rejected'],
+            'counts': [pending_count, approved_count, rejected_count]
+        },
+        'dates': {
+            'labels': [str(item[0]) for item in date_counts],
+            'counts': [item[1] for item in date_counts]
+        },
+        'top_submitters': {
+            'ips': [item[0] for item in top_submitters],
+            'counts': [item[1] for item in top_submitters]
+        },
+        'submissions': submissions,
+        'total_count': total_count,
+        'pending_count': pending_count,
+        'approved_count': approved_count,
+        'rejected_count': rejected_count
     }
+    
     return render_template('submission_analysis.html', active_page='submission_analysis', data=data)
 
+@app.route('/admin/recalculate_status', methods=['POST']) # This will be removed later
+@admin_required
+def recalculate_status():
+    # Get all judges with vote counts
+    judges = query_db('''
+        SELECT j.*,
+            COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
+            COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
+        FROM judges j
+        LEFT JOIN votes v ON j.id = v.judge_id
+        GROUP BY j.id
+    ''')
+
+    # Recalculate status and update database
+    for judge in judges:
+        judge_id = judge[0]
+        total_votes = judge[-2] + judge[-1]
+        status = 'undecided'
+        if total_votes >= 5:
+            corrupt_ratio = judge[-2] / total_votes if total_votes > 0 else 0
+            not_corrupt_ratio = judge[-1] / total_votes if total_votes > 0 else 0
+            if corrupt_ratio >= 0.8333:
+                status = 'corrupt'
+            elif not_corrupt_ratio >= 0.8333:
+                status = 'not_corrupt'
+
+        query_db('UPDATE judges SET status = %s WHERE id = %s', (status, judge_id))
+
+    log_admin_action('recalculate_status', 'Recalculated judge statuses based on vote counts')
+    return redirect(url_for('admin'))
+
 # --- Existing Admin Routes ---
+
+@app.route('/')
+def index():
+    if session.get('logged_in'):
+        return redirect(url_for('admin'))
+    else:
+        return redirect(url_for('login'))
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
@@ -449,6 +549,9 @@ def admin():
 @app.route('/admin/pending')
 @admin_required
 def admin_pending():
+    # First, ensure Antarctica data is in the database for 127.0.0.1
+    get_ip_geolocation('127.0.0.1')
+    
     # Get submissions grouped by judge name
     submissions = query_db('''
         SELECT
@@ -472,7 +575,7 @@ def admin_pending():
                 ','
             ) as locations
         FROM submissions
-        WHERE status = "pending"
+        WHERE status = 'pending'
         GROUP BY name, position, ruling, link, x_link
         ORDER BY first_submitted ASC
     ''')
@@ -480,7 +583,7 @@ def admin_pending():
     return render_template('admin_pending.html',
                          submissions=submissions,
                          active_page='pending')
-    
+
 @app.route('/admin/logs')
 @admin_required
 def admin_logs():
@@ -495,12 +598,16 @@ def admin_logs():
     # Fetch geolocation data for each IP
     actions_with_location = []
     for action in recent_actions:
-        admin_username, action_type, details, ip_address, timestamp = action
-        geo_data = get_ip_geolocation(ip_address)
+        geo_data = get_ip_geolocation(action[3])
         location = format_geolocation_data(geo_data) if geo_data else "Location unknown"
-        actions_with_location.append((
-            admin_username, action_type, details, ip_address, timestamp, location
-        ))
+        actions_with_location.append({
+            'admin_username': action[0],
+            'action': action[1],
+            'details': action[2],
+            'ip_address': action[3],
+            'timestamp': action[4],
+            'location': location
+        })
     
     return render_template('admin_logs.html',
                          recent_actions=actions_with_location,
@@ -517,7 +624,7 @@ def handle_submission(submission_id, action):
             query_db('''
                 INSERT INTO judges (name, job_position, ruling, link, x_link)
                 VALUES (%s, %s, %s, %s, %s)
-            ''', (submission['name'], submission['position'], submission['ruling'], submission['link'], submission['x_link']))
+            ''', (submission[1], submission[2], submission[3], submission[4], submission[5]))
             
             # Update submission status
             query_db('UPDATE submissions SET status = "approved" WHERE id = %s', (submission_id,))
@@ -572,51 +679,21 @@ def update_judge(judge_id):
 @admin_required
 def disable_judge(judge_id):
     # Get current displayed state
-    current_state = query_db('SELECT displayed FROM judges WHERE id = %s', (judge_id,), one=True)['displayed']
+    current_state = query_db('SELECT displayed FROM judges WHERE id = %s', (judge_id,), one=True)[0]
     # Set to 0 to disable, 1 to enable
     new_state = 0 if current_state == 1 else 1
     query_db('UPDATE judges SET displayed = %s WHERE id = %s', (new_state, judge_id))
     action = 'enable' if new_state == 1 else 'disable'
-    log_admin_action(f'{action}_judge', f'{action.capitalize()}d judge {judge_id}')
+    log_admin_action(f'{action}_judge', f'Judge ID: {judge_id}')
     return redirect(url_for('admin'))
 
-@app.route('/logout', methods=['POST'])
+@app.route('/logout', methods=['GET', 'POST'])
+@app.route('/admin/logout', methods=['GET', 'POST'])
 def logout():
     if session.get('logged_in'):
         log_admin_action('logout')
     session.clear()
-    return redirect(url_for('admin'))
-
-@app.route('/admin/recalculate_status', methods=['POST']) # This will be removed later
-@admin_required
-def recalculate_status():
-    # Get all judges with vote counts
-    judges = query_db('''
-        SELECT j.*,
-            COALESCE(SUM(CASE WHEN v.vote_type = 'corrupt' THEN 1 ELSE 0 END), 0) AS corrupt_votes,
-            COALESCE(SUM(CASE WHEN v.vote_type = 'not_corrupt' THEN 1 ELSE 0 END), 0) AS not_corrupt_votes
-        FROM judges j
-        LEFT JOIN votes v ON j.id = v.judge_id
-        GROUP BY j.id
-    ''')
-
-    # Recalculate status and update database
-    for judge in judges:
-        judge_id = judge[0]
-        total_votes = judge[-2] + judge[-1]
-        status = 'undecided'
-        if total_votes >= 5:
-            corrupt_ratio = judge[-2] / total_votes if total_votes > 0 else 0
-            not_corrupt_ratio = judge[-1] / total_votes if total_votes > 0 else 0
-            if corrupt_ratio >= 0.8333:
-                status = 'corrupt'
-            elif not_corrupt_ratio >= 0.8333:
-                status = 'not_corrupt'
-
-        query_db('UPDATE judges SET status = %s WHERE id = %s', (status, judge_id))
-
-    log_admin_action('recalculate_status', 'Recalculated judge statuses based on vote counts')
-    return redirect(url_for('admin'))
+    return redirect(url_for('login'))
 
 if __name__ == '__main__':
     port = int(os.environ.get('FLASK_RUN_PORT', 5001))

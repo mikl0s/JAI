@@ -1,16 +1,62 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Submission Analysis</title>
-    <link rel="stylesheet" href="/static/admin_style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin - Submission Analysis</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='antarctica.png') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     {% include 'admin_header.html' %}
-    <h1>Submission Analysis</h1>
-    <canvas id="submissionChart"></canvas>
-    <script>
-        // Chart.js code will go here
-    </script>
+    
+    <main class="main-content">
+        <div class="card">
+            <div class="header">
+                <h3>Submission Analysis</h3>
+            </div>
+            <div class="content">
+                <div class="chart-container" style="position: relative; height:400px; width:100%">
+                    <canvas id="submissionChart"></canvas>
+                </div>
+                
+                <div class="chart-container" style="position: relative; height:400px; width:100%; margin-top: 30px;">
+                    <canvas id="submissionStatusChart"></canvas>
+                </div>
+                
+                {% if data and data.submissions|length > 0 %}
+                <div class="stats-container">
+                    <div class="stat-box">
+                        <h4>Total Submissions</h4>
+                        <p class="stat-value">{{ data.total_count }}</p>
+                    </div>
+                    <div class="stat-box">
+                        <h4>Approved</h4>
+                        <p class="stat-value">{{ data.approved_count }}</p>
+                    </div>
+                    <div class="stat-box">
+                        <h4>Pending</h4>
+                        <p class="stat-value">{{ data.pending_count }}</p>
+                    </div>
+                    <div class="stat-box">
+                        <h4>Rejected</h4>
+                        <p class="stat-value">{{ data.rejected_count }}</p>
+                    </div>
+                </div>
+                {% else %}
+                <div class="empty-state">
+                    <p>No submission data available yet. As users submit judges, data will appear here.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </main>
+    
+    <!-- Hidden data element for JavaScript to access -->
+    <div id="page-data" data-page-data='{{ data|tojson|safe }}' style="display: none;"></div>
+    
+    <!-- Import modular JavaScript -->
+    <script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

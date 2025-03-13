@@ -2,11 +2,11 @@
     <div class="nav-links">
         <a href="/admin" class="nav-link {% if active_page == 'dashboard' %}active{% endif %}">Dashboard</a>
         <a href="/admin/pending" class="nav-link {% if active_page == 'pending' %}active{% endif %}">Submissions</a>
-        <a href="/admin/logs" class="nav-link {% if active_page == 'logs' %}active{% endif %}">Logs</a>
+        <a href="/admin/submission_analysis" class="nav-link {% if active_page == 'submission_analysis' %}active{% endif %}">Submission Analysis</a>
         <a href="/admin/suspicious_votes" class="nav-link {% if active_page == 'suspicious_votes' %}active{% endif %}">Suspicious Activity</a>
         <a href="/admin/geo_votes" class="nav-link {% if active_page == 'geo_votes' %}active{% endif %}">Geographic Analysis</a>
         <a href="/admin/vote_analysis" class="nav-link {% if active_page == 'vote_analysis' %}active{% endif %}">Vote Analysis</a>
-        <a href="/admin/submission_analysis" class="nav-link {% if active_page == 'submission_analysis' %}active{% endif %}">Submission Analysis</a>
+        <a href="/admin/logs" class="nav-link {% if active_page == 'logs' %}active{% endif %}">Logs</a>
     </div>
     <form action="/admin/logout" method="post" class="logout-form">
         <button type="submit" class="logout-button">Logout</button>

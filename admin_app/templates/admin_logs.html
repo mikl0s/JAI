@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Action Logs</title>
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='antarctica.png') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='admin_style.css') }}">
 </head>
 <body>
@@ -29,12 +30,12 @@
                         <tbody>
                             {% for action in recent_actions %}
                             <tr>
-                                <td>{{ action[0] }}</td>
-                                <td>{{ action[1] }}</td>
-                                <td>{{ action[2] if action[2] else '-' }}</td>
-                                <td>{{ action[3] }}</td>
-                                <td>{{ action[5] }}</td>
-                                <td>{{ action[4] }}</td>
+                                <td>{{ action['admin_username'] }}</td>
+                                <td>{{ action['action'] }}</td>
+                                <td>{{ action['details'] if action['details'] else '-' }}</td>
+                                <td>{{ action['ip_address'] }}</td>
+                                <td>{{ action['location'] }}</td>
+                                <td>{{ action['timestamp'] }}</td>
                             </tr>
                             {% endfor %}
                         </tbody>

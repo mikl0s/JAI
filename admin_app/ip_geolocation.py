@@ -64,17 +64,49 @@ def get_ip_geolocation(ip_address):
     if not is_ipv4(ip_address):
         return None
 
-    # If IP is localhost/127.0.0.1, get external IP
+    # Easter egg: Make localhost/127.0.0.1 show up as Antarctica
     if ip_address in ['127.0.0.1', 'localhost']:
-        external_ip = get_external_ip()
-        if external_ip:
-            ip_address = external_ip
-            # Update any existing records in the database
-            query_db('''
-                UPDATE ip_geolocation 
-                SET ip_address = %s 
-                WHERE ip_address IN ('127.0.0.1', 'localhost')
-            ''', (external_ip,))
+        # Insert Antarctica data into the database if it doesn't exist
+        conn = get_db_connection()
+        cur = conn.cursor()
+        
+        # Check if entry exists
+        cur.execute('SELECT id FROM ip_geolocation WHERE ip_address = %s', (ip_address,))
+        exists = cur.fetchone()
+        
+        if exists is None:
+            # Insert Antarctica data - let PostgreSQL handle the ID auto-increment
+            cur.execute('''
+                INSERT INTO ip_geolocation (
+                    ip_address, hostname, continent_code, continent_name,
+                    country_code2, country_code3, country_name, country_capital,
+                    state_prov, state_code, city, zipcode, latitude, longitude,
+                    is_eu, country_flag, country_emoji,
+                    isp, organization, timezone_name, timezone_offset,
+                    currency_code, currency_symbol
+                ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ''', (
+                ip_address, 'penguin.antarctica.local', 'AN', 'Antarctica',
+                'AQ', 'ATA', 'Antarctica', 'Amundsen-Scott Station',
+                'South Pole', 'SP', 'Penguin Colony', '00000', '-90.0000', '0.0000',
+                False, '/static/antarctica.png', '🇦🇶',
+                'Antarctic Network Services', 'Penguin Research Institute', 'Antarctica/South_Pole', '0',
+                'USD', '$'
+            ))
+            conn.commit()
+        
+        cur.close()
+        conn.close()
+        
+        # Return the data from the database
+        result = query_db('SELECT * FROM ip_geolocation WHERE ip_address = %s', 
+                       (ip_address,), one=True)
+        
+        # Ensure we return a proper dictionary
+        if result is not None:
+            # Convert to a standard dictionary if it's not already
+            return dict(result) if hasattr(result, 'keys') else result
+        return None
 
     # Check cache first
     cached = query_db('''
@@ -137,8 +169,15 @@ def get_ip_geolocation(ip_address):
             data.get('currency', {}).get('symbol')
         ))
 
-        return query_db('SELECT * FROM ip_geolocation WHERE ip_address = %s', 
+        # Return the geolocation data
+        result = query_db('SELECT * FROM ip_geolocation WHERE ip_address = %s', 
                        (ip_address,), one=True)
+        
+        # Ensure we return a proper dictionary
+        if result is not None:
+            # Convert to a standard dictionary if it's not already
+            return dict(result) if hasattr(result, 'keys') else result
+        return None
     
     except Exception as e:
         print(f"Error fetching geolocation data for IP {ip_address}: {str(e)}")
@@ -178,7 +217,15 @@ def format_geolocation_data(geo_data):
     if organization:
         details.append(f"Org: {organization}")
     if timezone_name:
-        offset_str = f"{timezone_offset:+d}" if timezone_offset is not None else ""
+        # Convert timezone_offset to int if it's a string, or handle it safely
+        if timezone_offset is not None:
+            try:
+                offset_int = int(timezone_offset) if isinstance(timezone_offset, str) else timezone_offset
+                offset_str = f"{offset_int:+d}"
+            except (ValueError, TypeError):
+                offset_str = str(timezone_offset)
+        else:
+            offset_str = ""
         details.append(f"TZ: {timezone_name} (UTC{offset_str})")
     if is_eu:
         details.append("🇪🇺 EU")
