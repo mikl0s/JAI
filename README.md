@@ -25,26 +25,24 @@ A comprehensive web application for tracking judicial accountability through com
   - Browser fingerprint validation
   - Input validation and sanitization
   - Action logging and monitoring
-- **Service Management**: Unified service management script for both main and admin applications
 
 ## 🛠️ Tech Stack
 
 - **Backend**: Python/Flask
-- **Database**: PostgreSQL with advanced indexing
+- **Database**: SQLite with advanced indexing
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+)
 - **Authentication**: Flask-Login with session management
 - **Styling**: Custom CSS with Gotham and Old Stamper fonts
 - **Security**: Flask-Talisman, CSRF protection
 - **Geolocation**: IP-based geolocation with caching
 - **Rate Limiting**: Custom implementation with IP tracking
-- **Caching**: Flask-Caching for improved performance
 
 ## 📋 Prerequisites
 
 - Python 3.8 or higher
 - pip (Python package manager)
 - Git
-- PostgreSQL (running externally)
+- SQLite3
 
 ## 🔧 Installation
 
@@ -54,83 +52,45 @@ git clone git@github.com:mikl0s/JAI.git
 cd JAI
 ```
 
-2. Set up environment variables:
-Create `.env` files for both main and admin applications with the following variables:
+2. Create and activate a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+```
 
-For main app (`.env`):
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
+
+4. Initialize the database:
+```bash
+python initialize_db.py
+python create_tables.py
+python populate_ip_geolocation.py
+```
+
+5. Set up environment variables:
+Create a `.env.local` file with the following variables:
 ```
 FLASK_SECRET_KEY=your_secret_key
-DB_NAME=jai_db
-DB_USER=jai
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=5432
-```
-
-For admin app (`admin_app/.env`):
-```
-FLASK_SECRET_KEY=your_admin_secret_key
 ADMIN_USERNAME=your_admin_username
 ADMIN_PASSWORD=your_admin_password
-DB_NAME=jai_db
-DB_USER=jai
-DB_PASSWORD=your_password
-DB_HOST=localhost
-DB_PORT=5432
-```
-
-3. Set up virtual environments and install dependencies using the services script:
-```bash
-./services.sh setup
-```
-
-4. Initialize the PostgreSQL database:
-```bash
-python migrate_to_postgres.py
 ```
 
 ## 🚦 Usage
 
-### Service Management
-
-The project includes a comprehensive `services.sh` script to manage both the main and admin applications:
-
+1. Start the Flask application:
 ```bash
-# Start both applications
-./services.sh start
-
-# Start only the main application
-./services.sh start main
-
-# Start only the admin application
-./services.sh start admin
-
-# Stop all running applications
-./services.sh stop
-
-# Restart all applications
-./services.sh restart
-
-# Check status of running applications
-./services.sh status
-
-# Set up virtual environments and install dependencies
-./services.sh setup
-
-# Display help information
-./services.sh help
+python app.py
 ```
 
-Both applications run in debug mode during development, which enables automatic reloading when code changes are detected.
-
-### Accessing the Applications
-
+2. Access the application:
 - Main interface: `http://localhost:5000`
-- Admin panel: `http://localhost:5001`
+- Admin panel: `http://localhost:5000/admin`
 
-### Development Workflow
-
-- Database migrations: Use PostgreSQL migration scripts
+3. Development workflow:
+- Database migrations: Update create_tables.py and run initialize_db.py
 - Testing: Manual testing through interface and database verification
 - Deployment: Ensure proper security configurations and environment variables
 
