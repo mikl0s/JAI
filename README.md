@@ -3,7 +3,6 @@
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
 [![Maintenance](https://img.shields.io/badge/Maintained%3F-yes-green.svg)](https://github.com/mikl0s/JAI/graphs/commit-activity)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A comprehensive web application for tracking judicial accountability through community submissions and voting, featuring advanced IP geolocation tracking, rate limiting, and administrative controls.
 
@@ -26,15 +25,28 @@ A comprehensive web application for tracking judicial accountability through com
   - Input validation and sanitization
   - Action logging and monitoring
 
+## 📦 Project Structure
+
+JAI consists of two separate applications:
+
+1. **Main Application**: Public-facing website where users can view judges, vote, and submit new judges
+   - Located in the project root directory
+   - Runs on port 5000 by default
+
+2. **Admin Application**: Administrative interface for managing judges, reviewing submissions, and monitoring system activity
+   - Located in the `admin_app` directory
+   - Runs on port 5001 by default
+   - Requires authentication to access
+
 ## 🛠️ Tech Stack
 
 - **Backend**: Python/Flask
-- **Database**: SQLite with advanced indexing
+- **Database**: PostgreSQL
 - **Frontend**: HTML5, CSS3, JavaScript (ES6+)
 - **Authentication**: Flask-Login with session management
 - **Styling**: Custom CSS with Gotham and Old Stamper fonts
 - **Security**: Flask-Talisman, CSRF protection
-- **Geolocation**: IP-based geolocation with caching
+- **Geolocation**: IP-based geolocation with IPGeolocation API
 - **Rate Limiting**: Custom implementation with IP tracking
 
 ## 📋 Prerequisites
@@ -42,7 +54,9 @@ A comprehensive web application for tracking judicial accountability through com
 - Python 3.8 or higher
 - pip (Python package manager)
 - Git
-- SQLite3
+- PostgreSQL
+- Screen (for running services in the background)
+- IPGeolocation API account and key (https://ipgeolocation.io/)
 
 ## 🔧 Installation
 
@@ -52,97 +66,79 @@ git clone git@github.com:mikl0s/JAI.git
 cd JAI
 ```
 
-2. Create and activate a virtual environment:
+2. Set up the main application:
 ```bash
+# Create and activate a virtual environment for the main app
 python -m venv venv
 source venv/bin/activate  # On Windows use: venv\Scripts\activate
-```
 
-3. Install dependencies:
-```bash
+# Install dependencies
 pip install -r requirements.txt
+
+# Deactivate when done
+deactivate
 ```
 
-4. Initialize the database:
+3. Set up the admin application:
 ```bash
-python initialize_db.py
-python create_tables.py
-python populate_ip_geolocation.py
+# Navigate to the admin app directory
+cd admin_app
+
+# Create and activate a virtual environment for the admin app
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Deactivate when done
+deactivate
+cd ..
 ```
 
-5. Set up environment variables:
-Create a `.env.local` file with the following variables:
-```
-FLASK_SECRET_KEY=your_secret_key
-ADMIN_USERNAME=your_admin_username
-ADMIN_PASSWORD=your_admin_password
-```
+4. Configure environment variables:
+   - Copy `.env.example` to `.env.local` in the project root
+   - Copy `admin_app/.env.example` to `admin_app/.env.local`
+   - Update both files with your PostgreSQL connection details and IPGeolocation API key
 
-## 🚦 Usage
-
-1. Start the Flask application:
+5. Database setup:
 ```bash
-python app.py
+# Activate the main app virtual environment
+source venv/bin/activate
+
+# Run the database initialization script
+python init_db.py
+
+# Deactivate when done
+deactivate
 ```
 
-2. Access the application:
+## 🚦 Running the Applications
+
+Use the `services.sh` script to manage both applications:
+
+```bash
+# Make the script executable
+chmod +x services.sh
+
+# For help and available commands
+./services.sh --help
+```
+
+## 📱 Accessing the Applications
+
 - Main interface: `http://localhost:5000`
-- Admin panel: `http://localhost:5000/admin`
-
-3. Development workflow:
-- Database migrations: Update create_tables.py and run initialize_db.py
-- Testing: Manual testing through interface and database verification
-- Deployment: Ensure proper security configurations and environment variables
+- Admin panel: `http://localhost:5001`
 
 ## 🔐 Security Features
 
 - **Rate Limiting**:
   - Submission cooldown periods
   - Vote rate limiting (1 vote per judge per day)
-  - IP-based tracking
-  - Whitelist system
-  - Browser fingerprint validation
-
+- **IP Geolocation**:
+  - Track submission origins
+  - Identify suspicious voting patterns
 - **Admin Security**:
-  - Session-based authentication
-  - IP whitelisting
-  - Action logging
-  - Geographic tracking
-  - Vote pattern monitoring
-
-- **Input Validation**:
-  - Form validation
-  - URL validation
-  - Status validation
-  - Vote validation
-
-## 🤝 Contributing
-
-We welcome contributions! Please follow these guidelines:
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-Before contributing, please:
-- Review the codebase documentation in codebase.md
-- Ensure your changes follow the existing security patterns
-- Include appropriate tests and documentation updates
-- Verify database schema compatibility
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙏 Acknowledgments
-
-- Thanks to all contributors who have helped shape JAI
-- Special thanks to the Flask community for excellent documentation
-- Inspiration from judicial accountability initiatives worldwide
-
-## 📞 Contact
-
-Project Link: [https://github.com/mikl0s/JAI](https://github.com/mikl0s/JAI)
-Issue Tracker: [https://github.com/mikl0s/JAI/issues](https://github.com/mikl0s/JAI/issues)
+  - IP whitelist for admin access
+  - Secure session management
+  - Activity logging
