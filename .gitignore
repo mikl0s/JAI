@@ -48,3 +48,5 @@ Thumbs.db
 *.7z
 confirmed.csv
 undecided.csv
+
+flask_session/
