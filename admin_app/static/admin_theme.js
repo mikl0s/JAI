@@ -21,22 +21,29 @@ function setupThemeToggle() {
     const themeToggleBtn = document.getElementById('theme-toggle');
     if (!themeToggleBtn) return;
     
-    // Check for saved theme preference or use system preference
+    // Check for saved theme preference, default to dark if not set
     const savedTheme = localStorage.getItem('admin-theme');
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
     
-    // Apply theme based on saved preference or system preference
-    if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
-        document.body.classList.add('dark-theme');
-        updateThemeIcon(true);
-    } else {
-        document.body.classList.remove('dark-theme');
+    // Apply theme based on saved preference, defaulting to dark
+    if (savedTheme === 'light') {
+        document.documentElement.classList.remove('dark-theme');
+        document.body.classList.remove('dark-theme'); // Keep for backward compatibility
         updateThemeIcon(false);
+    } else {
+        // Default to dark theme
+        document.documentElement.classList.add('dark-theme');
+        document.body.classList.add('dark-theme'); // Keep for backward compatibility
+        updateThemeIcon(true);
+        // Save preference if not already saved
+        if (!savedTheme) {
+            localStorage.setItem('admin-theme', 'dark');
+        }
     }
     
     // Toggle theme when button is clicked
     themeToggleBtn.addEventListener('click', function() {
-        const isDarkMode = document.body.classList.toggle('dark-theme');
+        const isDarkMode = document.documentElement.classList.toggle('dark-theme');
+        document.body.classList.toggle('dark-theme'); // Keep for backward compatibility
         localStorage.setItem('admin-theme', isDarkMode ? 'dark' : 'light');
         updateThemeIcon(isDarkMode);
     });

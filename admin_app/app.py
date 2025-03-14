@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, request, redirect, url_for, session, send_from_directory
+from flask import Flask, jsonify, render_template, request, redirect, url_for, session, send_from_directory, flash
 import psycopg2
 import psycopg2.extras
 from psycopg2.extras import RealDictCursor
@@ -9,6 +9,8 @@ from ip_geolocation import get_ip_geolocation, format_geolocation_data
 from flask_caching import Cache
 from dotenv import load_dotenv
 from flask_session import Session
+import hashlib
+import secrets
 
 # Load environment variables from .env
 load_dotenv()
@@ -279,8 +281,17 @@ def geo_votes():
         'hourly': hourly_data,
         'daily': daily_data
     }
+    
+    # Prepare top countries data for the chart
+    top_countries_data = []
+    for row in country_distribution[:10]:  # Get top 10 countries for the chart
+        top_countries_data.append([row[1], row[2]])  # Use country name and vote count
 
-    return render_template('geo_votes.html', active_page='geo_votes', data=data)
+    return render_template('geo_votes.html', 
+                          active_page='geo_votes', 
+                          data=data,
+                          region_distribution=region_distribution,
+                          top_countries=top_countries_data)
 
 @app.route('/admin/vote_analysis')
 @admin_required
@@ -461,27 +472,73 @@ def submission_analysis():
     total_count = pending_count + approved_count + rejected_count
     
     # Format data for charts
-    data = {
-        'status': {
-            'labels': ['Pending', 'Approved', 'Rejected'],
-            'counts': [pending_count, approved_count, rejected_count]
-        },
-        'dates': {
-            'labels': [str(item[0]) for item in date_counts],
-            'counts': [item[1] for item in date_counts]
-        },
-        'top_submitters': {
-            'ips': [item[0] for item in top_submitters],
-            'counts': [item[1] for item in top_submitters]
-        },
-        'submissions': submissions,
-        'total_count': total_count,
-        'pending_count': pending_count,
-        'approved_count': approved_count,
-        'rejected_count': rejected_count
+    submission_trends = []
+    for item in date_counts:
+        submission_trends.append([str(item[0]), item[1]])
+    
+    approval_stats = {
+        'labels': ['Approved', 'Rejected', 'Pending'],
+        'data': [approved_count, rejected_count, pending_count]
     }
     
-    return render_template('submission_analysis.html', active_page='submission_analysis', data=data)
+    # Get judge types (positions) distribution
+    position_counts = query_db('''
+        SELECT position, COUNT(*)
+        FROM submissions
+        GROUP BY position
+        ORDER BY COUNT(*) DESC
+    ''')
+    
+    # Format position data for the chart
+    position_labels = []
+    position_data = []
+    
+    for item in position_counts:
+        # Handle None values
+        position = item[0] if item[0] else 'Unspecified'
+        position_labels.append(position)
+        position_data.append(item[1])
+    
+    # Limit to top 5 positions if there are too many
+    if len(position_labels) > 5:
+        # Keep top 4 and group the rest as 'Other'
+        other_count = sum(position_data[4:])
+        position_labels = position_labels[:4] + ['Other']
+        position_data = position_data[:4] + [other_count]
+    
+    category_stats = {
+        'labels': position_labels,
+        'data': position_data
+    }
+    
+    return render_template('submission_analysis.html', 
+                          active_page='submission_analysis',
+                          data={
+                              'status': {
+                                  'labels': ['Pending', 'Approved', 'Rejected'],
+                                  'counts': [pending_count, approved_count, rejected_count]
+                              },
+                              'dates': {
+                                  'labels': [str(item[0]) for item in date_counts],
+                                  'counts': [item[1] for item in date_counts]
+                              },
+                              'top_submitters': {
+                                  'ips': [item[0] for item in top_submitters],
+                                  'counts': [item[1] for item in top_submitters]
+                              },
+                              'submissions': submissions,
+                              'total_count': total_count,
+                              'pending_count': pending_count,
+                              'approved_count': approved_count,
+                              'rejected_count': rejected_count
+                          },
+                          total_submissions=total_count,
+                          approved_submissions=approved_count,
+                          rejected_submissions=rejected_count,
+                          pending_submissions=pending_count,
+                          submission_trends=submission_trends,
+                          approval_stats=approval_stats,
+                          category_stats=category_stats)
 
 @app.route('/admin/recalculate_status', methods=['POST']) # This will be removed later
 @admin_required
@@ -528,13 +585,33 @@ def login():
     if request.method == 'POST':
         username = request.form['username']
         password = request.form['password']
-        if username == 'admin' and password == 'admin':
+        
+        # Get user from database
+        user = query_db('''
+            SELECT id, username, password_hash, role, is_active
+            FROM admin_users
+            WHERE username = %s
+        ''', (username,), one=True)
+        
+        # Check if user exists and is active
+        if user and user['is_active'] and verify_password(user['password_hash'], password):
             session['logged_in'] = True
             session['username'] = username
+            session['user_id'] = user['id']
+            session['user_role'] = user['role']
+            
+            # Update last login time
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute('UPDATE admin_users SET last_login = CURRENT_TIMESTAMP WHERE id = %s', (user['id'],))
+            conn.commit()
+            cursor.close()
+            conn.close()
+            
             log_admin_action('login')
             return redirect(url_for('admin'))
         else:
-            return "Invalid credentials", 401
+            return render_template('login.html', error="Invalid username or password"), 401
     return render_template('login.html')
 
 @app.route('/admin')
@@ -556,12 +633,79 @@ def admin():
         'approved': 0,
         'rejected': 0
     }
-    for status, count in stats:
+    
+    # Process stats correctly based on the actual data structure returned
+    for stat in stats:
+        if isinstance(stat, dict):
+            # If using RealDictCursor
+            status = stat['status']
+            count = stat['count']
+        else:
+            # If using regular cursor
+            status, count = stat
+            
         stats_dict[status] = count
 
+    # Get recent submissions for preview
+    submissions = query_db('''
+        SELECT 
+            s.id, 
+            s.name, 
+            s.position, 
+            s.ruling, 
+            s.link,
+            TO_CHAR(s.submitted_at, 'YYYY-MM-DD HH24:MI:SS') as created_at
+        FROM submissions s
+        WHERE s.status = 'pending'
+        ORDER BY s.submitted_at DESC
+        LIMIT 5
+    ''')
+    
+    # Get recent logs
+    recent_logs = query_db('''
+        SELECT id, admin_username, action, details, ip_address, timestamp
+        FROM admin_logs
+        ORDER BY timestamp DESC
+        LIMIT 5
+    ''')
+    
+    # Format logs for the template
+    formatted_logs = []
+    for log in recent_logs:
+        if isinstance(log, dict):
+            # If using RealDictCursor
+            message = log['details'] if log['details'] else ''
+            # Truncate message if too long
+            if len(message) > 40:
+                message = message[:37] + '...'
+                
+            formatted_log = {
+                'action': log['action'],
+                'message': message,
+                'timestamp': log['timestamp'],
+                'username': log['admin_username']
+            }
+        else:
+            # If using regular cursor
+            message = log[3] if log[3] else ''
+            # Truncate message if too long
+            if len(message) > 40:
+                message = message[:37] + '...'
+                
+            formatted_log = {
+                'action': log[2],  # action
+                'message': message,  # truncated details
+                'timestamp': log[5],  # timestamp
+                'username': log[1]  # admin_username
+            }
+        formatted_logs.append(formatted_log)
+    
     return render_template('admin.html',
                          judges=judges,
-                         stats=stats_dict,
+                         submissions=submissions,
+                         recent_logs=formatted_logs,
+                         pending_count=stats_dict['pending'],
+                         rejected_count=stats_dict['rejected'],
                          active_page='dashboard')
 
 @app.route('/admin/pending')
@@ -573,28 +717,28 @@ def admin_pending():
     # Get submissions grouped by judge name
     submissions = query_db('''
         SELECT
-            name,
-            position,
-            ruling,
-            link,
-            x_link,
+            s.name,
+            s.position,
+            s.ruling,
+            s.link,
+            s.x_link,
             COUNT(*) as submission_count,
-            STRING_AGG(id::text, ',') as submission_ids,
-            STRING_AGG(ip_address, ',') as ip_addresses,
-            MIN(submitted_at) as first_submitted,
+            STRING_AGG(s.id::text, ',') as submission_ids,
+            STRING_AGG(s.ip_address, ',') as ip_addresses,
+            MIN(s.submitted_at) as first_submitted,
             STRING_AGG(
                 COALESCE(
                     (SELECT country_name || '|' || country_code2 || '|' || country_flag
                      FROM ip_geolocation
-                     WHERE ip_geolocation.ip_address = submissions.ip_address
+                     WHERE ip_geolocation.ip_address = s.ip_address
                      LIMIT 1),
                     'Unknown|XX|https://flagcdn.com/16x12/xx.png'
                 ),
                 ','
             ) as locations
-        FROM submissions
-        WHERE status = 'pending'
-        GROUP BY name, position, ruling, link, x_link
+        FROM submissions s
+        WHERE s.status = 'pending'
+        GROUP BY s.name, s.position, s.ruling, s.link, s.x_link
         ORDER BY first_submitted ASC
     ''')
 
@@ -606,30 +750,47 @@ def admin_pending():
 @admin_required
 def admin_logs():
     # Get all admin actions
-    recent_actions = query_db('''
-        SELECT admin_username, action, details, ip_address, timestamp
+    logs = query_db('''
+        SELECT id, admin_username, action, details, ip_address, timestamp
         FROM admin_logs
         ORDER BY timestamp DESC
         LIMIT 50
     ''')
     
-    # Fetch geolocation data for each IP
-    actions_with_location = []
-    for action in recent_actions:
-        geo_data = get_ip_geolocation(action[3])
-        location = format_geolocation_data(geo_data) if geo_data else "Location unknown"
-        actions_with_location.append({
-            'admin_username': action[0],
-            'action': action[1],
-            'details': action[2],
-            'ip_address': action[3],
-            'timestamp': action[4],
-            'location': location
-        })
+    # Format logs for the template
+    formatted_logs = []
+    for log in logs:
+        if isinstance(log, dict):
+            # If using RealDictCursor
+            message = log['details'] if log['details'] else ''
+            # Truncate message if too long
+            if len(message) > 40:
+                message = message[:37] + '...'
+                
+            formatted_log = {
+                'action': log['action'],
+                'message': message,
+                'timestamp': log['timestamp'],
+                'username': log['admin_username']
+            }
+        else:
+            # If using regular cursor
+            message = log[3] if log[3] else ''
+            # Truncate message if too long
+            if len(message) > 40:
+                message = message[:37] + '...'
+                
+            formatted_log = {
+                'action': log[2],  # action
+                'message': message,  # truncated details
+                'timestamp': log[5],  # timestamp
+                'username': log[1]  # admin_username
+            }
+        formatted_logs.append(formatted_log)
     
     return render_template('admin_logs.html',
-                         recent_actions=actions_with_location,
-                         active_page='logs')
+                          logs=formatted_logs,
+                          active_page='logs')
 
 @app.route('/admin/submission/<int:submission_id>/<action>', methods=['POST'])
 @admin_required
@@ -712,6 +873,320 @@ def logout():
         log_admin_action('logout')
     session.clear()
     return redirect(url_for('login'))
+
+# Admin users table creation
+def create_admin_users_table():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Create admin_users table if it doesn't exist
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS admin_users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                email TEXT,
+                role TEXT DEFAULT 'admin',
+                is_active BOOLEAN DEFAULT TRUE,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_login TIMESTAMP
+            )
+        ''')
+        
+        # Check if there's at least one admin user
+        cursor.execute('SELECT COUNT(*) FROM admin_users')
+        count = cursor.fetchone()[0]
+        
+        # Create default admin user if none exists
+        if count == 0:
+            # Generate a secure password
+            default_password = secrets.token_urlsafe(12)
+            password_hash = hashlib.sha256(default_password.encode()).hexdigest()
+            
+            cursor.execute('''
+                INSERT INTO admin_users (username, password_hash, role)
+                VALUES (%s, %s, %s)
+            ''', ('admin', password_hash, 'admin'))
+            
+            print(f"Created default admin user. Username: admin, Password: {default_password}")
+            print("Please change this password immediately after first login!")
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return True
+    except Exception as e:
+        print(f"Error creating admin_users table: {e}")
+        return False
+
+# Create admin_users table on startup
+create_admin_users_table()
+
+# Hash password function
+def hash_password(password):
+    return hashlib.sha256(password.encode()).hexdigest()
+
+# Verify password function
+def verify_password(stored_hash, password):
+    return stored_hash == hashlib.sha256(password.encode()).hexdigest()
+
+# Admin users routes
+@app.route('/admin/users')
+@admin_required
+def admin_users():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Get all admin users
+        cursor.execute('''
+            SELECT id, username, email, role, is_active, last_login
+            FROM admin_users
+            ORDER BY username
+        ''')
+        users = cursor.fetchall()
+        
+        # Format users for display
+        formatted_users = []
+        for user in users:
+            formatted_users.append({
+                'id': user[0],
+                'username': user[1],
+                'email': user[2],
+                'role': user[3],
+                'is_active': user[4],
+                'last_login': user[5]
+            })
+        
+        edit_user = None
+    except Exception as e:
+        print(f"Error fetching admin users: {e}")
+        formatted_users = []
+        edit_user = None
+    finally:
+        cursor.close()
+        conn.close()
+    
+    # Log the action
+    log_admin_action('view', f'Viewed admin users list')
+    
+    return render_template('admin_users.html', 
+                           active_page='admin_users',
+                           users=formatted_users,
+                           edit_user=edit_user)
+
+@app.route('/admin/users/get/<int:user_id>')
+@admin_required
+def get_admin_user(user_id):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    try:
+        # Get user data
+        cursor.execute('''
+            SELECT id, username, email, role, is_active
+            FROM admin_users
+            WHERE id = %s
+        ''', (user_id,))
+        user = cursor.fetchone()
+        
+        if user:
+            user_data = {
+                'id': user[0],
+                'username': user[1],
+                'email': user[2],
+                'role': user[3],
+                'is_active': user[4]
+            }
+            return jsonify(user_data)
+        else:
+            return jsonify({'error': 'User not found'}), 404
+    except Exception as e:
+        print(f"Error fetching admin user: {e}")
+        return jsonify({'error': str(e)}), 500
+    finally:
+        cursor.close()
+        conn.close()
+
+@app.route('/admin/users/add', methods=['POST'])
+@admin_required
+def add_admin_user():
+    # Get form data
+    username = request.form.get('username')
+    password = request.form.get('password')
+    email = request.form.get('email')
+    role = request.form.get('role')
+    
+    # Validate data
+    if not username or not password:
+        flash('Username and password are required', 'error')
+        return redirect('/admin/users')
+    
+    # Hash password
+    password_hash = hash_password(password)
+    
+    try:
+        # Insert new user
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO admin_users (username, password_hash, email, role)
+            VALUES (%s, %s, %s, %s)
+        ''', (username, password_hash, email, role))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Log the action
+        log_admin_action('add', f'Added new admin user: {username}')
+        
+        flash(f'Admin user {username} added successfully', 'success')
+    except Exception as e:
+        flash(f'Error adding admin user: {str(e)}', 'error')
+    
+    return redirect('/admin/users')
+
+@app.route('/admin/users/edit/<int:user_id>')
+@admin_required
+def edit_admin_user(user_id):
+    return redirect(f'/admin/users?edit={user_id}')
+
+@app.route('/admin/users/update/<int:user_id>', methods=['POST'])
+@admin_required
+def update_admin_user(user_id):
+    # Get form data
+    username = request.form.get('username')
+    password = request.form.get('password')
+    email = request.form.get('email')
+    role = request.form.get('role')
+    is_active = request.form.get('is_active') == '1'
+    
+    # Validate data
+    if not username:
+        flash('Username is required', 'error')
+        return redirect('/admin/users')
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Update user with or without password
+        if password:
+            # Hash new password
+            password_hash = hash_password(password)
+            cursor.execute('''
+                UPDATE admin_users
+                SET username = %s, password_hash = %s, email = %s, role = %s, is_active = %s
+                WHERE id = %s
+            ''', (username, password_hash, email, role, is_active, user_id))
+        else:
+            # Update without changing password
+            cursor.execute('''
+                UPDATE admin_users
+                SET username = %s, email = %s, role = %s, is_active = %s
+                WHERE id = %s
+            ''', (username, email, role, is_active, user_id))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Log the action
+        log_admin_action('update', f'Updated admin user: {username}')
+        
+        flash(f'Admin user {username} updated successfully', 'success')
+    except Exception as e:
+        flash(f'Error updating admin user: {str(e)}', 'error')
+    
+    return redirect('/admin/users')
+
+@app.route('/admin/users/activate/<int:user_id>', methods=['POST'])
+@admin_required
+def activate_admin_user(user_id):
+    try:
+        # Get user info for logging
+        user = query_db('SELECT username FROM admin_users WHERE id = %s', (user_id,), one=True)
+        if not user:
+            flash('User not found', 'error')
+            return redirect('/admin/users')
+        
+        username = user[0] if isinstance(user, tuple) else user['username']
+        
+        # Activate user
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE admin_users SET is_active = TRUE WHERE id = %s', (user_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Log the action
+        log_admin_action('update', f'Activated admin user: {username}')
+        
+        flash(f'Admin user {username} activated successfully', 'success')
+    except Exception as e:
+        flash(f'Error activating admin user: {str(e)}', 'error')
+    
+    return redirect('/admin/users')
+
+@app.route('/admin/users/deactivate/<int:user_id>', methods=['POST'])
+@admin_required
+def deactivate_admin_user(user_id):
+    try:
+        # Get user info for logging
+        user = query_db('SELECT username FROM admin_users WHERE id = %s', (user_id,), one=True)
+        if not user:
+            flash('User not found', 'error')
+            return redirect('/admin/users')
+        
+        username = user[0] if isinstance(user, tuple) else user['username']
+        
+        # Deactivate user
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('UPDATE admin_users SET is_active = FALSE WHERE id = %s', (user_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Log the action
+        log_admin_action('update', f'Deactivated admin user: {username}')
+        
+        flash(f'Admin user {username} deactivated successfully', 'success')
+    except Exception as e:
+        flash(f'Error deactivating admin user: {str(e)}', 'error')
+    
+    return redirect('/admin/users')
+
+@app.route('/admin/users/delete/<int:user_id>', methods=['POST'])
+@admin_required
+def delete_admin_user(user_id):
+    try:
+        # Get user info for logging
+        user = query_db('SELECT username FROM admin_users WHERE id = %s', (user_id,), one=True)
+        if not user:
+            flash('User not found', 'error')
+            return redirect('/admin/users')
+        
+        username = user[0] if isinstance(user, tuple) else user['username']
+        
+        # Delete user
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM admin_users WHERE id = %s', (user_id,))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        # Log the action
+        log_admin_action('delete', f'Deleted admin user: {username}')
+        
+        flash(f'Admin user {username} deleted successfully', 'success')
+    except Exception as e:
+        flash(f'Error deleting admin user: {str(e)}', 'error')
+    
+    return redirect('/admin/users')
 
 if __name__ == '__main__':
     port = int(os.environ.get('FLASK_RUN_PORT', 5001))

@@ -33,7 +33,7 @@
     </div>
     <div class="content">
         <div class="chart-container">
-            <canvas id="submissionTrends"></canvas>
+            <canvas id="trendsChart"></canvas>
         </div>
     </div>
 </div>
@@ -45,18 +45,18 @@
         </div>
         <div class="content">
             <div class="chart-container">
-                <canvas id="approvalRateChart"></canvas>
+                <canvas id="approvalChart"></canvas>
             </div>
         </div>
     </div>
     
     <div class="card">
         <div class="header">
-            <h3>Submission Sources</h3>
+            <h3>Category Distribution</h3>
         </div>
         <div class="content">
             <div class="chart-container">
-                <canvas id="sourcesChart"></canvas>
+                <canvas id="categoryChart"></canvas>
             </div>
         </div>
     </div>
@@ -65,22 +65,26 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
+        // Prepare data from Jinja template
+        const submissionTrends = JSON.parse('{{ submission_trends|tojson }}');
+        const approvalStats = JSON.parse('{{ approval_stats|tojson }}');
+        const categoryStats = JSON.parse('{{ category_stats|tojson }}');
+        
+        // Format dates for trends
+        const formattedTrends = submissionTrends.map(item => {
+            // First element is a date string in format YYYY-MM-DD
+            return [item[0], item[1]]; 
+        });
+        
         // Submission trends chart
         const trendsData = {
-            labels: [
-                {% for trend in submission_trends %}
-                '{{ trend[0].strftime("%Y-%m-%d") }}',
-                {% endfor %}
-            ],
+            labels: formattedTrends.map(item => item[0]),
             datasets: [{
                 label: 'Submissions',
-                data: [
-                    {% for trend in submission_trends %}
-                    {{ trend[1] }},
-                    {% endfor %}
-                ],
+                data: formattedTrends.map(item => item[1]),
                 backgroundColor: 'rgba(54, 162, 235, 0.2)',
                 borderColor: 'rgba(54, 162, 235, 1)',
                 borderWidth: 2,
@@ -88,35 +92,35 @@
             }]
         };
         
-        new Chart(
-            document.getElementById('submissionTrends').getContext('2d'),
-            {
-                type: 'line',
-                data: trendsData,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            ticks: {
-                                precision: 0
-                            }
+        const trendsCtx = document.getElementById('trendsChart').getContext('2d');
+        const trendsChart = new Chart(trendsCtx, {
+            type: 'line',
+            data: trendsData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
                         }
                     }
                 }
             }
-        );
+        });
         
         // Approval rate chart
+        console.log('Approval stats:', approvalStats);
+        
+        // Calculate total for percentages
+        const approvalTotal = approvalStats.data.reduce((sum, value) => sum + value, 0);
+        
         const approvalData = {
-            labels: ['Approved', 'Rejected', 'Pending'],
+            labels: approvalStats.labels,
             datasets: [{
-                data: [
-                    {{ approved_submissions }},
-                    {{ rejected_submissions }},
-                    {{ pending_submissions }}
-                ],
+                label: 'Submission Status',
+                data: approvalStats.data,
                 backgroundColor: [
                     'rgba(75, 192, 192, 0.7)',
                     'rgba(255, 99, 132, 0.7)',
@@ -131,55 +135,94 @@
             }]
         };
         
-        new Chart(
-            document.getElementById('approvalRateChart').getContext('2d'),
-            {
-                type: 'doughnut',
-                data: approvalData,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
+        console.log('Approval chart data:', approvalData);
+        
+        const approvalCtx = document.getElementById('approvalChart').getContext('2d');
+        const approvalChart = new Chart(approvalCtx, {
+            type: 'doughnut',
+            data: approvalData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        display: true
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const percentage = ((value / approvalTotal) * 100).toFixed(1);
+                                return `${label}: ${value} (${percentage}%)`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        formatter: (value, ctx) => {
+                            const percentage = ((value / approvalTotal) * 100).toFixed(1);
+                            return `${percentage}%`;
+                        },
+                        color: '#fff',
+                        font: {
+                            weight: 'bold',
+                            size: 12
                         }
                     }
+                },
+                animation: {
+                    animateScale: true,
+                    animateRotate: true
                 }
-            }
-        );
+            },
+            plugins: [ChartDataLabels]
+        });
         
-        // Mock data for sources chart (replace with real data when available)
-        const sourcesData = {
-            labels: ['Direct', 'Social Media', 'Email', 'Other'],
+        // Category distribution chart
+        console.log('Category stats:', categoryStats);
+        
+        const categoryData = {
+            labels: categoryStats.labels,
             datasets: [{
-                label: 'Submission Sources',
-                data: [65, 25, 5, 5],
-                backgroundColor: [
-                    'rgba(54, 162, 235, 0.7)',
-                    'rgba(255, 99, 132, 0.7)',
-                    'rgba(75, 192, 192, 0.7)',
-                    'rgba(255, 205, 86, 0.7)'
-                ],
+                label: 'Submissions by Category',
+                data: categoryStats.data,
+                backgroundColor: 'rgba(153, 102, 255, 0.7)',
+                borderColor: 'rgba(153, 102, 255, 1)',
                 borderWidth: 1
             }]
         };
         
-        new Chart(
-            document.getElementById('sourcesChart').getContext('2d'),
-            {
-                type: 'pie',
-                data: sourcesData,
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom'
+        const categoryCtx = document.getElementById('categoryChart').getContext('2d');
+        const categoryChart = new Chart(categoryCtx, {
+            type: 'bar',
+            data: categoryData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
                         }
                     }
+                },
+                plugins: {
+                    datalabels: {
+                        anchor: 'end',
+                        align: 'top',
+                        formatter: (value) => value,
+                        color: '#fff',
+                        font: {
+                            weight: 'bold'
+                        },
+                        padding: 6
+                    }
                 }
-            }
-        );
+            },
+            plugins: [ChartDataLabels]
+        });
     });
 </script>
 {% endblock %}

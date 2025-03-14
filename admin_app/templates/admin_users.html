@@ -1,0 +1,342 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin Users{% endblock %}
+
+{% block content %}
+<div class="mb-4 d-flex justify-between align-center">
+    <div>
+        <h1 class="mb-2">Admin Users</h1>
+        <p class="text-secondary">Manage admin application users.</p>
+    </div>
+    <button id="openAddUserModal" class="btn">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="mr-2"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="8.5" cy="7" r="4"></circle><line x1="20" y1="8" x2="20" y2="14"></line><line x1="23" y1="11" x2="17" y2="11"></line></svg>
+        Add New User
+    </button>
+</div>
+
+<div class="card">
+    <div class="header">
+        <h3>Admin Users</h3>
+    </div>
+    <div class="content">
+        <div class="table-container">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th>Role</th>
+                        <th>Status</th>
+                        <th>Last Login</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for user in users %}
+                    <tr>
+                        <td>{{ user.username }}</td>
+                        <td>{{ user.email or '-' }}</td>
+                        <td><span class="badge badge-{{ 'success' if user.role == 'admin' else 'info' if user.role == 'moderator' else 'secondary' }}">{{ user.role|upper }}</span></td>
+                        <td>
+                            {% if user.is_active %}
+                            <span class="badge badge-success">ACTIVE</span>
+                            {% else %}
+                            <span class="badge badge-danger">INACTIVE</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ user.last_login.strftime('%Y-%m-%d %H:%M') if user.last_login else 'Never' }}</td>
+                        <td class="actions">
+                            <button class="btn-icon edit-user" data-id="{{ user.id }}" title="Edit User">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>
+                            </button>
+                            {% if user.is_active %}
+                            <form method="post" action="/admin/users/deactivate/{{ user.id }}" class="inline-form" onsubmit="return confirm('Are you sure you want to deactivate this user?');">
+                                <button type="submit" class="btn-icon" title="Deactivate User">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                                </button>
+                            </form>
+                            {% else %}
+                            <form method="post" action="/admin/users/activate/{{ user.id }}" class="inline-form">
+                                <button type="submit" class="btn-icon" title="Activate User">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
+                                </button>
+                            </form>
+                            {% endif %}
+                            <form method="post" action="/admin/users/delete/{{ user.id }}" class="inline-form" onsubmit="return confirm('Are you sure you want to delete this user? This action cannot be undone.');">
+                                <button type="submit" class="btn-icon btn-danger" title="Delete User">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not users %}
+                    <tr>
+                        <td colspan="6" class="text-center text-secondary">No admin users found</td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Add User Modal -->
+<div class="modal" id="addUserModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Add New Admin User</h3>
+            <span class="close-modal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form method="post" action="/admin/users/add">
+                <div class="field">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" placeholder="Username" required>
+                </div>
+                <div class="field">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" placeholder="Password" required>
+                </div>
+                <div class="field">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" placeholder="Email">
+                </div>
+                <div class="field">
+                    <label for="role">Role</label>
+                    <select id="role" name="role">
+                        <option value="admin">Admin</option>
+                        <option value="moderator">Moderator</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary close-modal-btn">Cancel</button>
+                    <button type="submit" class="btn">Add User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div class="modal" id="editUserModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3>Edit User</h3>
+            <span class="close-modal">&times;</span>
+        </div>
+        <div class="modal-body">
+            <form method="post" id="editUserForm" action="/admin/users/update/0">
+                <div class="field">
+                    <label for="edit_username">Username</label>
+                    <input type="text" id="edit_username" name="username" required>
+                </div>
+                <div class="field">
+                    <label for="edit_password">Password (leave blank to keep current)</label>
+                    <input type="password" id="edit_password" name="password" placeholder="New password">
+                </div>
+                <div class="field">
+                    <label for="edit_email">Email</label>
+                    <input type="email" id="edit_email" name="email">
+                </div>
+                <div class="field">
+                    <label for="edit_role">Role</label>
+                    <select id="edit_role" name="role">
+                        <option value="admin">Admin</option>
+                        <option value="moderator">Moderator</option>
+                        <option value="viewer">Viewer</option>
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="edit_status">Status</label>
+                    <select id="edit_status" name="is_active">
+                        <option value="1">Active</option>
+                        <option value="0">Inactive</option>
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary close-modal-btn">Cancel</button>
+                    <button type="submit" class="btn">Update User</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_css %}
+<style>
+    .inline-form {
+        display: inline;
+    }
+    
+    .actions {
+        white-space: nowrap;
+    }
+    
+    .btn-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 4px;
+        background-color: var(--bg-tertiary);
+        color: var(--text-primary);
+        border: none;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    
+    .btn-icon:hover {
+        background-color: var(--bg-secondary);
+    }
+    
+    .btn-danger {
+        color: var(--danger);
+    }
+    
+    .btn-danger:hover {
+        background-color: rgba(var(--danger-rgb), 0.1);
+    }
+    
+    .justify-between {
+        justify-content: space-between;
+    }
+    
+    .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        overflow: auto;
+    }
+    
+    .modal.show {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    
+    .modal-content {
+        background-color: var(--bg-primary);
+        border-radius: 8px;
+        width: 90%;
+        max-width: 600px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        animation: modalFadeIn 0.3s;
+    }
+    
+    .modal-header {
+        padding: 1rem;
+        border-bottom: 1px solid var(--border-color);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .modal-body {
+        padding: 1rem;
+    }
+    
+    .modal-footer {
+        padding: 1rem;
+        border-top: 1px solid var(--border-color);
+        text-align: right;
+    }
+    
+    .close-modal {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--text-secondary);
+        text-decoration: none;
+        cursor: pointer;
+    }
+    
+    @keyframes modalFadeIn {
+        from { opacity: 0; transform: translateY(-20px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+    
+    /* Responsive table adjustments */
+    @media (max-width: 768px) {
+        .data-table {
+            display: block;
+            overflow-x: auto;
+            white-space: nowrap;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Add User Modal
+        const addUserModal = document.getElementById('addUserModal');
+        const openAddUserBtn = document.getElementById('openAddUserModal');
+        const closeModalBtns = document.querySelectorAll('.close-modal, .close-modal-btn');
+        
+        openAddUserBtn.addEventListener('click', function() {
+            addUserModal.classList.add('show');
+        });
+        
+        // Edit User Modal
+        const editUserModal = document.getElementById('editUserModal');
+        const editUserBtns = document.querySelectorAll('.edit-user');
+        const editUserForm = document.getElementById('editUserForm');
+        
+        editUserBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                const userId = this.getAttribute('data-id');
+                
+                // Fetch user data via AJAX
+                fetch(`/admin/users/get/${userId}`)
+                    .then(response => response.json())
+                    .then(user => {
+                        // Update form action
+                        editUserForm.action = `/admin/users/update/${userId}`;
+                        
+                        // Populate form fields
+                        document.getElementById('edit_username').value = user.username;
+                        document.getElementById('edit_email').value = user.email || '';
+                        document.getElementById('edit_role').value = user.role;
+                        document.getElementById('edit_status').value = user.is_active ? '1' : '0';
+                        
+                        // Clear password field
+                        document.getElementById('edit_password').value = '';
+                        
+                        // Show modal
+                        editUserModal.classList.add('show');
+                    })
+                    .catch(error => {
+                        console.error('Error fetching user data:', error);
+                    });
+            });
+        });
+        
+        // Close modals
+        closeModalBtns.forEach(btn => {
+            btn.addEventListener('click', function() {
+                addUserModal.classList.remove('show');
+                editUserModal.classList.remove('show');
+            });
+        });
+        
+        // Close modal on backdrop click
+        window.addEventListener('click', function(event) {
+            if (event.target === addUserModal) {
+                addUserModal.classList.remove('show');
+            }
+            if (event.target === editUserModal) {
+                editUserModal.classList.remove('show');
+            }
+        });
+    });
+</script>
+{% endblock %}

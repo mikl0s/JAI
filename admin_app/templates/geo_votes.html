@@ -64,24 +64,22 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="anonymous"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin="anonymous"></script>
 <script>
     document.addEventListener('DOMContentLoaded', function() {
-        // Chart for top countries
-        const countryData = [
-            {% for country in top_countries %}
-            { country: '{{ country[0] }}', votes: {{ country[1] }} },
-            {% endfor %}
-        ];
+        // Prepare data from Jinja template
+        const countryData = JSON.parse('{{ top_countries|tojson }}');
         
+        // Chart for top countries
         const ctx = document.getElementById('countryChart').getContext('2d');
-        new Chart(ctx, {
+        const countryChart = new Chart(ctx, {
             type: 'bar',
             data: {
-                labels: countryData.map(function(item) { return item.country; }),
+                labels: countryData.map(function(item) { return item[0]; }),
                 datasets: [{
                     label: 'Vote Count',
-                    data: countryData.map(function(item) { return item.votes; }),
+                    data: countryData.map(function(item) { return item[1]; }),
                     backgroundColor: 'rgba(54, 162, 235, 0.7)',
                     borderColor: 'rgba(54, 162, 235, 1)',
                     borderWidth: 1
@@ -101,15 +99,77 @@
             }
         });
         
-        // Initialize map
-        const map = L.map('map').setView([20, 0], 2);
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        // Initialize map with Stadia Maps (more reliable than OpenStreetMap for direct usage)
+        const map = L.map('map', {
+            center: [20, 0],
+            zoom: 2,
+            minZoom: 1,
+            maxZoom: 6,
+            maxBounds: [[-90, -180], [90, 180]],
+            maxBoundsViscosity: 1.0,
+            worldCopyJump: true
+        });
+        
+        // Use CartoDB basemap which is more reliable
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+            subdomains: 'abcd',
+            maxZoom: 20
         }).addTo(map);
         
-        // Add markers for each country
-        // This is just a placeholder - in a real implementation, you would need
-        // to have the latitude and longitude for each country
+        // Add markers for countries with vote data
+        const countryCoordinates = {
+            'United States': [37.0902, -95.7129],
+            'United Kingdom': [55.3781, -3.4360],
+            'Canada': [56.1304, -106.3468],
+            'Australia': [-25.2744, 133.7751],
+            'Germany': [51.1657, 10.4515],
+            'France': [46.2276, 2.2137],
+            'Japan': [36.2048, 138.2529],
+            'India': [20.5937, 78.9629],
+            'Brazil': [-14.2350, -51.9253],
+            'Russia': [61.5240, 105.3188],
+            'China': [35.8617, 104.1954],
+            'South Africa': [-30.5595, 22.9375],
+            'Mexico': [23.6345, -102.5528],
+            'Spain': [40.4637, -3.7492],
+            'Italy': [41.8719, 12.5674],
+            'Antarctica': [-82.8628, 135.0000]
+        };
+        
+        // Create a custom icon using div elements instead of image files
+        const createCustomIcon = function(color) {
+            return L.divIcon({
+                className: 'custom-div-icon',
+                html: `<div style="background-color: ${color}; width: 10px; height: 10px; border-radius: 50%; border: 2px solid white;"></div>`,
+                iconSize: [15, 15],
+                iconAnchor: [7, 7]
+            });
+        };
+        
+        // Add markers for each country in the data
+        countryData.forEach(function(item) {
+            const countryName = item[0];
+            const voteCount = item[1];
+            
+            if (countryCoordinates[countryName]) {
+                const coords = countryCoordinates[countryName];
+                const marker = L.marker(coords, {
+                    icon: createCustomIcon('#3388ff')
+                }).addTo(map);
+                
+                // Scale the circle size based on vote count
+                const radius = Math.max(100000, Math.sqrt(voteCount) * 50000);
+                L.circle(coords, {
+                    color: 'rgba(54, 162, 235, 0.8)',
+                    fillColor: 'rgba(54, 162, 235, 0.3)',
+                    fillOpacity: 0.5,
+                    radius: radius
+                }).addTo(map);
+                
+                marker.bindPopup(`<b>${countryName}</b><br>Votes: ${voteCount}`);
+            }
+        });
     });
 </script>
 {% endblock %}
@@ -141,6 +201,12 @@
         .grid-2-1 {
             grid-template-columns: 1fr;
         }
+    }
+    
+    /* Custom map styles */
+    .custom-div-icon {
+        background: none;
+        border: none;
     }
 </style>
 {% endblock %}

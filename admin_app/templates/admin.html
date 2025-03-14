@@ -9,7 +9,7 @@
 </div>
 
 <!-- Dashboard Overview Cards -->
-<div class="grid-3 mb-4">
+<div class="grid-2 mb-4">
     <div class="card">
         <div class="header">
             <h3>Statistics</h3>
@@ -42,32 +42,6 @@
     
     <div class="card">
         <div class="header">
-            <h3>Add New Judge</h3>
-        </div>
-        <div class="content">
-            <form method="post" action="/admin/add">
-                <div class="field">
-                    <input type="text" name="name" placeholder="Name" required>
-                </div>
-                <div class="field">
-                    <input type="text" name="job_position" placeholder="Job Position" required>
-                </div>
-                <div class="field">
-                    <input type="text" name="ruling" placeholder="Ruling" required>
-                </div>
-                <div class="field">
-                    <input type="text" name="ruling_link" placeholder="Ruling Link" required>
-                </div>
-                <div class="field">
-                    <input type="text" name="relevant_link" placeholder="Relevant X Link" required>
-                </div>
-                <button type="submit" class="btn w-100">Add Judge</button>
-            </form>
-        </div>
-    </div>
-    
-    <div class="card">
-        <div class="header">
             <h3>Recent Activity</h3>
         </div>
         <div class="content">
@@ -87,8 +61,13 @@
                             {% endif %}
                         </div>
                         <div class="activity-details">
-                            <div class="activity-text">{{ log.message }}</div>
-                            <div class="activity-time">{{ log.timestamp }}</div>
+                            <div class="activity-text">
+                                {% if log.username %}<span class="activity-user">{{ log.username }}</span>{% endif %}
+                                {{ log.message }}
+                            </div>
+                            <div class="activity-time">
+                                {{ log.timestamp }}
+                            </div>
                         </div>
                     </div>
                     {% endfor %}
@@ -231,6 +210,11 @@
     .activity-time {
         font-size: 0.8rem;
         color: var(--text-secondary);
+    }
+    
+    .activity-user {
+        font-weight: bold;
+        margin-right: 0.5rem;
     }
     
     .disabled-row {
