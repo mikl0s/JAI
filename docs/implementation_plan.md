@@ -17,7 +17,7 @@ Current Version: 0.5.0
     - [x] Rate limiting implementation (basic)
     - [x] Basic anti-spam measures (honeypot)
 
-- [ ] **Update 0.6.0:** Enhanced Security and Scalability
+- [x] **Update 0.6.0:** Enhanced Security and Scalability
     - [x] Separate Admin Interface into its own Flask application
     - [x] Implement HMAC Authentication
     - [x] Implement Browser Fingerprinting
@@ -28,15 +28,15 @@ Current Version: 0.5.0
 
 
 - [ ] **Update 0.7.0:**  Admin Monitoring and Geographic Analysis
-    - [ ] Suspicious voting patterns page (admin interface)
-    - [ ] Geographic vote distribution visualization (admin interface)
+    - [x] Suspicious voting patterns page (admin interface)
+    - [x] Geographic vote distribution visualization (admin interface)
     - [ ] Automated alerts system (for suspicious activity)
-    - [ ] Enhanced admin dashboard
+    - [x] Enhanced admin dashboard
     - [x] Toggle on frontpage floating bottom left - show all votes or just votes from USA
-    - [ ] Separate data analysis page in the dashboard for votes and submissions
+    - [x] Separate data analysis page in the dashboard for votes and submissions
 
-- [ ] **Update 0.8.0:** Database Migration
-    - [ ] Migrate from SQLite to PostgreSQL
+- [x] **Update 0.8.0:** Database Migration
+    - [x] Migrate from SQLite to PostgreSQL
 
 - [ ] **Update 0.9.0:** Unit Testing & CloudFlare
     - [ ] Implement comprehensive unit tests for backend (Flask) and frontend (JavaScript) code.
