@@ -104,7 +104,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Open modal
     submitBtn.onclick = () => {
-        modal.style.display = 'block';
+        modal.style.display = 'flex';
     };
 
     // Close modal

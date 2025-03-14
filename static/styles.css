@@ -14,9 +14,14 @@ body {
     color: #000000;
     margin: 0;
     padding: 0;
+    padding-top: 120px; /* Add padding to account for the fixed header */
 }
 
 header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
     background-color: #002868;
     color: #ffffff;
     padding: 20px;
@@ -25,6 +30,7 @@ header {
     font-family: 'Old Stamper', serif;
     font-size: 2.5em;
     margin: 0;
+    z-index: 1000;
 }
 
 h1 {
@@ -43,7 +49,10 @@ h2 {
 
 main {
     padding: 20px;
-    padding-bottom: 80px; /* Add padding to account for the fixed footer */
+    padding-bottom: 120px; /* Increase padding to account for the fixed footer */
+    overflow-y: auto; /* Enable scrolling for the main content */
+    height: calc(100vh - 220px); /* Calculate height based on viewport minus header and footer */
+    margin-top: 20px; /* Add some space after the header */
 }
 
 .judge-list {
@@ -336,11 +345,12 @@ footer {
     width: 100%;
     height: 100%;
     background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
 }
 
 .modal-content {
     background-color: #ffffff;
-    margin: 5% auto;
     padding: 20px;
     border: 2px solid #002868;
     border-radius: 8px;
@@ -348,6 +358,7 @@ footer {
     max-width: 500px; /* Reduced max-width */
     position: relative;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2); /* Added box-shadow */
+    margin: 15% auto; /* Restore margin for vertical positioning */
 }
 
 .modal-header {
