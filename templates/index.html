@@ -95,6 +95,96 @@
     .btn-red   { background: #c0392b; }
     .btn-green { background: #27ae60; }
 
+    .center-links-container {
+        text-align: center;
+        margin: 20px 0;
+        display: inline-block;
+    }
+
+    .center-button {
+        margin: 10px;
+        padding: 10px 20px;
+        font-size: 1rem;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .center-button:hover {
+        opacity: 0.8;
+    }
+
+    .donation-icon {
+        font-size: 2rem;
+        margin-right: 10px;
+    }
+
+    .donation-label {
+        font-size: 1.2rem;
+        font-weight: bold;
+    }
+
+    .donation-options {
+        margin-top: 20px;
+    }
+
+    .donation-option {
+        margin-bottom: 10px;
+    }
+
+    footer {
+        position: fixed;
+        bottom: 0;
+        width: 100%;
+        background-color: #fff;
+        padding: 10px 0;
+        text-align: center;
+    }
+
+    .footer-container {
+        width: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        align-items: center;
+        max-height: 100px;
+    }
+
+    .footer-item {
+        margin: 10px;
+        padding: 10px;
+        text-align: center;
+    }
+
+    .footer-button {
+        margin: 10px;
+        padding: 10px 20px;
+        font-size: 1rem;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+
+    .footer-button:hover {
+        opacity: 0.8;
+    }
+
+    .left-align {
+        text-align: left;
+    }
+
+    .center-align {
+        text-align: center;
+    }
+
+    .right-align {
+        text-align: right;
+    }
+
+    .center-buttons {
+        display: flex;
+        justify-content: space-between;
+    }
     </style>
 </head>
 <body>
@@ -103,17 +193,52 @@
         <div id="current-ratio"></div>
     </header>
 
-    <!-- Floating Submit Button -->
-    <button id="submit-judge-btn" class="submit-button floating">Submit New Judge</button>
+    <main>
+        <section id="confirmed">
+            <h2>VOTED CORRUPT</h2>
+            <div id="confirmed-list" class="judge-list">
+                
+            </div>
+        </section>
+        <section id="undecided">
+            <h2>STILL UNDECIDED</h2>
+            <div id="undecided-list" class="judge-list">
+                
+            </div>
+        </section>
+        <section id="not-corrupt">
+            <h2>VOTED NOT CORRUPT</h2>
+            <div id="not-corrupt-list" class="judge-list">
+                
+            </div>
+        </section>
+    </main>
 
-    <!-- USA Only Toggle -->
-    <div class="toggle-container floating-toggle">
-        <label class="switch">
-            <input type="checkbox" id="usa-only-toggle">
-            <span class="slider round"></span>
-        </label>
-        <span class="toggle-label">USA Only</span>
-    </div>
+    <footer>
+        <div class="footer-container">
+            <!-- USA Votes Only Toggle - Left aligned -->
+            <div class="footer-item left-align">
+                <div class="toggle-container">
+                    <label class="switch">
+                        <input type="checkbox" id="usa-only-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                    <span class="toggle-label">USA Votes Only</span>
+                </div>
+            </div>
+
+            <!-- Center buttons side by side -->
+            <div class="footer-item center-align">
+                <button id="about-jai-btn" class="footer-button about-donate-button">About JAI</button>
+                <button id="donate-jai-btn" class="footer-button about-donate-button">Donate to JAI</button>
+            </div>
+
+            <!-- Submit Judge Button - Right aligned -->
+            <div class="footer-item right-align">
+                <button id="submit-judge-btn" class="footer-button submit-button">Submit New Judge</button>
+            </div>
+        </div>
+    </footer>
 
     <!-- Submit Judge Modal -->
     <div id="submit-modal" class="modal">
@@ -147,6 +272,48 @@
                 </div>
                 <button type="submit" class="submit-button">Submit</button>
             </form>
+        </div>
+    </div>
+
+    <!-- About JAI Modal -->
+    <div id="about-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 class="modal-header">About Judicial Accountability Initiative</h2>
+            <div class="modal-body">
+                <p>The Judicial Accountability Initiative (JAI) is a platform dedicated to tracking and evaluating judicial decisions to promote transparency and accountability in the judicial system.</p>
+                <p>Our mission is to provide citizens with a tool to identify potentially corrupt or biased rulings and to highlight judges who consistently uphold the law with integrity.</p>
+                <p>Through crowdsourced voting, we aim to create a transparent system that helps identify patterns in judicial behavior.</p>
+                
+                <h3>Upcoming Features</h3>
+                <p>In our next major update, we will be introducing a read-only API for data transparency, allowing researchers and journalists to access our database for analysis and reporting.</p>
+                
+                <h3>Rate Limiting</h3>
+                <p>To ensure the integrity of our voting system, we implement rate limiting on voting and submissions. This prevents abuse and ensures that our data represents genuine public opinion rather than automated or coordinated campaigns.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Donate to JAI Modal -->
+    <div id="donate-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 class="modal-header">Support Judicial Accountability Initiative</h2>
+            <div class="modal-body">
+                <p>JAI operates independently to maintain our neutrality and integrity. Donations help us cover server costs and ongoing maintenance to keep this platform available to everyone.</p>
+                <p>Your support enables JAI's growth and development, allowing us to dedicate more resources to improving and expanding this important platform.</p>
+                
+                <div class="donation-options">
+                    <div class="donation-option">
+                        <i class="far fa-credit-card donation-icon"></i>
+                        <span class="donation-label">Donate with Credit Card</span>
+                    </div>
+                    <div class="donation-option">
+                        <i class="fab fa-bitcoin donation-icon"></i>
+                        <span class="donation-label">Donate with Cryptocurrency</span>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -214,26 +381,6 @@
         </div>
     </template>
 
-    <main>
-        <section id="confirmed">
-            <h2>Confirmed Corrupt</h2>
-            <div id="confirmed-list" class="judge-list">
-                
-            </div>
-        </section>
-        <section id="undecided">
-            <h2>Undecided</h2>
-            <div id="undecided-list" class="judge-list">
-                
-            </div>
-        </section>
-        <section id="not-corrupt">
-            <h2>Not Corrupt</h2>
-            <div id="not-corrupt-list" class="judge-list">
-                
-            </div>
-        </section>
-    </main>
     <!-- Add Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
